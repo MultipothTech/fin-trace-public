@@ -233,7 +233,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                         </div>
 
                         {/* Price & Billing Cycle */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <Label htmlFor="price" className="text-xs font-medium">
                                     {t.modals.price} (฿) *
@@ -298,7 +298,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                         )}
 
                         {/* Start Date & Next Billing Date */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <Label htmlFor="startDate" className="text-xs font-medium flex items-center gap-1">
                                     <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
@@ -329,7 +329,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                         </div>
 
                         {/* Category & Payment Method */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
                                     <Label htmlFor="category" className="text-xs font-medium">
@@ -386,7 +386,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                         </div>
 
                         {/* Reminder Days & (if edit) Status */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <Label htmlFor="reminder" className="text-xs font-medium">
                                     {t.modals.reminderDays}

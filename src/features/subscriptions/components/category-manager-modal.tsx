@@ -230,7 +230,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     return (
         <>
         <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { resetForm(); onClose(); } }}>
-            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <FolderKanban className="w-5 h-5 text-indigo-400" />
@@ -372,7 +372,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                             {/* Grid with infinite scroll */}
                             <div
                                 ref={iconScrollRef}
-                                className="grid grid-cols-6 gap-1.5 p-2 rounded-xl bg-card/60 border border-border/50 max-h-48 overflow-y-auto"
+                                className="grid grid-cols-5 sm:grid-cols-6 gap-1.5 p-2 rounded-xl bg-card/60 border border-border/50 max-h-48 overflow-y-auto"
                             >
                                 {visibleIcons.map((iconName) => {
                                     const isSelected = form.icon === iconName;
