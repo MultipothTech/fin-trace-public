@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -20,11 +20,17 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { POPULAR_PRESETS, TRANSLATIONS, SUBSCRIPTION_CATEGORIES } from '@/config/constants';
-import type { Subscription, SubscriptionInput, BillingCycle, SubscriptionStatus, Language } from '@/features/subscriptions/types/subscription.types';
+import type { Subscription, SubscriptionInput, BillingCycle, SubscriptionStatus, Language, TagItem } from '@/features/subscriptions/types/subscription.types';
 import { calculateNextBillingDate } from '@/features/subscriptions/utils/billing-calculator';
 import { resolveCategory } from '@/features/subscriptions/utils/category-helper';
 import { CategoryManagerModal } from '@/features/subscriptions/components/category-manager-modal';
 import { useApp } from '@/providers/app-store';
+import { searchTags } from '@/features/tags/server/api/tags-api';
+import { searchProjects } from '@/features/projects/server/api/projects-api';
+import {
+    MultiChipAutocomplete,
+    resolvePendingChipNames,
+} from '@/components/multi-chip-autocomplete';
 import { Settings2, Calendar, Sparkles, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { getUsdToThbRate, convertUsdToThb, DEFAULT_USD_THB_RATE } from '@/lib/currency/exchange-rate';
 import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
@@ -44,7 +50,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     subscription,
     language,
 }) => {
-    const { categories } = useApp();
+    const { categories, tags, projects, addTag, addProject } = useApp();
     const t = TRANSLATIONS[language] || TRANSLATIONS.th;
     const isEdit = !!subscription;
 
@@ -59,6 +65,10 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         startDate: todayStr,
         nextBillingDate: todayStr,
         category: 'streaming',
+        categoryId: null,
+        tagId: null,
+        tagIds: [],
+        projectIds: [],
         paymentMethod: 'Credit Card',
         reminderDays: 3,
         status: 'active',
@@ -66,6 +76,139 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     });
     const [submitting, setSubmitting] = useState(false);
     const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+
+    // Tag autocomplete (multi)
+    const [tagQuery, setTagQuery] = useState('');
+    const [tagSuggestions, setTagSuggestions] = useState<TagItem[]>([]);
+    const [tagMenuOpen, setTagMenuOpen] = useState(false);
+    const [tagSearching, setTagSearching] = useState(false);
+    /** Names typed that are not yet in DB — created on save */
+    const [pendingTagNames, setPendingTagNames] = useState<string[]>([]);
+    const [pendingProjectNames, setPendingProjectNames] = useState<string[]>([]);
+    const [projectQueryLeftover, setProjectQueryLeftover] = useState('');
+    const tagWrapRef = useRef<HTMLDivElement>(null);
+    const tagSearchSeq = useRef(0);
+
+    const tagLabel = (tag: TagItem) => (language === 'th' ? tag.nameTh : tag.nameEn) || tag.nameEn || tag.nameTh;
+
+    const selectedTagItems = tags.filter((t) => (form.tagIds || []).includes(t.id));
+
+    const findExactTag = (text: string, list: TagItem[] = tags): TagItem | undefined => {
+        const q = text.trim().toLowerCase();
+        if (!q) return undefined;
+        return list.find(
+            (t) => t.nameEn.toLowerCase() === q || t.nameTh.toLowerCase() === q
+        );
+    };
+
+    const isNameAlreadySelected = (name: string) => {
+        const q = name.trim().toLowerCase();
+        if (!q) return true;
+        if (pendingTagNames.some((n) => n.toLowerCase() === q)) return true;
+        return selectedTagItems.some(
+            (t) => t.nameEn.toLowerCase() === q || t.nameTh.toLowerCase() === q
+        );
+    };
+
+    const addTagByItem = (tag: TagItem) => {
+        setForm((prev) => {
+            const current = prev.tagIds || [];
+            if (current.includes(tag.id)) return prev;
+            const next = [...current, tag.id];
+            return { ...prev, tagIds: next, tagId: next[0] || null };
+        });
+        setPendingTagNames((prev) =>
+            prev.filter(
+                (n) =>
+                    n.toLowerCase() !== tag.nameEn.toLowerCase() &&
+                    n.toLowerCase() !== tag.nameTh.toLowerCase()
+            )
+        );
+        setTagQuery('');
+        setTagMenuOpen(false);
+    };
+
+    const addTagByName = (rawName: string) => {
+        const name = rawName.trim();
+        if (!name || isNameAlreadySelected(name)) {
+            setTagQuery('');
+            return;
+        }
+        const existing = findExactTag(name) || findExactTag(name, tagSuggestions);
+        if (existing) {
+            addTagByItem(existing);
+            return;
+        }
+        setPendingTagNames((prev) =>
+            prev.some((n) => n.toLowerCase() === name.toLowerCase()) ? prev : [...prev, name]
+        );
+        setTagQuery('');
+        setTagMenuOpen(false);
+    };
+
+    const commitTagNames = (names: string[]) => {
+        const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+        if (unique.length === 0) return;
+
+        const addIds: string[] = [];
+        const addPending: string[] = [];
+
+        for (const name of unique) {
+            if (isNameAlreadySelected(name) || addPending.some((n) => n.toLowerCase() === name.toLowerCase())) {
+                continue;
+            }
+            const existing = findExactTag(name) || findExactTag(name, tagSuggestions);
+            if (existing) {
+                if (!addIds.includes(existing.id) && !(form.tagIds || []).includes(existing.id)) {
+                    addIds.push(existing.id);
+                }
+            } else {
+                addPending.push(name);
+            }
+        }
+
+        if (addIds.length > 0) {
+            setForm((prev) => {
+                const current = prev.tagIds || [];
+                const next = [...current];
+                addIds.forEach((id) => {
+                    if (!next.includes(id)) next.push(id);
+                });
+                return { ...prev, tagIds: next, tagId: next[0] || null };
+            });
+        }
+        if (addPending.length > 0) {
+            setPendingTagNames((prev) => {
+                const next = [...prev];
+                addPending.forEach((name) => {
+                    if (!next.some((n) => n.toLowerCase() === name.toLowerCase())) next.push(name);
+                });
+                return next;
+            });
+        }
+        setTagQuery('');
+        setTagMenuOpen(false);
+    };
+
+    const commitTagQuery = (raw = tagQuery) => {
+        commitTagNames(
+            raw
+                .split(',')
+                .map((p) => p.trim())
+                .filter(Boolean)
+        );
+    };
+
+    const removeSelectedTagId = (id: string) => {
+        setForm((prev) => {
+            const next = (prev.tagIds || []).filter((tid) => tid !== id);
+            return { ...prev, tagIds: next, tagId: next[0] || null };
+        });
+    };
+
+    const removePendingName = (name: string) => {
+        setPendingTagNames((prev) => prev.filter((n) => n !== name));
+    };
 
     // Quick Action toggle state (default is closed/hidden)
     const [showPresets, setShowPresets] = useState(false);
@@ -103,6 +246,13 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
             const days = subscription.customIntervalDays || 1;
             const next = subscription.nextBillingDate || calculateNextBillingDate(start, cycle, undefined, days);
 
+            const initialTagIds =
+                subscription.tagIds?.length
+                    ? subscription.tagIds
+                    : subscription.tagId
+                      ? [subscription.tagId]
+                      : [];
+
             setForm({
                 name: subscription.name,
                 price: subscription.price,
@@ -112,11 +262,21 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 startDate: start,
                 nextBillingDate: next,
                 category: subscription.category || 'streaming',
+                categoryId: subscription.categoryId || null,
+                tagId: initialTagIds[0] || null,
+                tagIds: initialTagIds,
+                projectIds: subscription.projectIds || [],
                 paymentMethod: subscription.paymentMethod || 'Credit Card',
                 reminderDays: subscription.reminderDays || 3,
                 status: subscription.status || 'active',
                 notes: subscription.notes || '',
             });
+            setTagQuery('');
+            setPendingTagNames([]);
+            setPendingProjectNames([]);
+            setProjectQueryLeftover('');
+            setTagSuggestions([]);
+            setTagMenuOpen(false);
             setRawPriceInput(subscription.price > 0 ? String(subscription.price) : '');
             setInputCurrency('THB');
             setShowPresets(false);
@@ -131,19 +291,101 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 startDate: todayStr,
                 nextBillingDate: calculatedNext,
                 category: 'streaming',
+                categoryId: null,
+                tagId: null,
+                tagIds: [],
+                projectIds: [],
                 paymentMethod: 'Credit Card',
                 reminderDays: 3,
                 status: 'active',
                 notes: '',
             });
+            setTagQuery('');
+            setPendingTagNames([]);
+            setPendingProjectNames([]);
+            setProjectQueryLeftover('');
+            setTagSuggestions([]);
+            setTagMenuOpen(false);
             setRawPriceInput('');
             setInputCurrency('THB');
             setShowPresets(false);
         }
-    }, [subscription, isOpen, todayStr]);
+        // Intentionally omit `tags` — only reset when modal open / subscription changes
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [subscription, isOpen, todayStr, language]);
+
+    // Debounced tag search (ILIKE via API)
+    useEffect(() => {
+        if (!isOpen) return;
+        const q = tagQuery.trim();
+        if (!q) {
+            setTagSuggestions([]);
+            setTagSearching(false);
+            return;
+        }
+
+        const seq = ++tagSearchSeq.current;
+        setTagSearching(true);
+        const timer = window.setTimeout(async () => {
+            try {
+                const results = await searchTags(q);
+                if (seq === tagSearchSeq.current) {
+                    setTagSuggestions(results);
+                }
+            } catch (err) {
+                console.error(err);
+                if (seq === tagSearchSeq.current) {
+                    // Fallback: filter local tags
+                    const lower = q.toLowerCase();
+                    setTagSuggestions(
+                        tags.filter(
+                            (t) =>
+                                t.nameEn.toLowerCase().includes(lower) ||
+                                t.nameTh.toLowerCase().includes(lower)
+                        )
+                    );
+                }
+            } finally {
+                if (seq === tagSearchSeq.current) setTagSearching(false);
+            }
+        }, 250);
+
+        return () => window.clearTimeout(timer);
+    }, [tagQuery, isOpen, tags]);
+
+    // Close tag dropdown on outside click
+    useEffect(() => {
+        if (!tagMenuOpen) return;
+        const onPointerDown = (e: PointerEvent) => {
+            if (tagWrapRef.current && !tagWrapRef.current.contains(e.target as Node)) {
+                setTagMenuOpen(false);
+            }
+        };
+        document.addEventListener('pointerdown', onPointerDown);
+        return () => document.removeEventListener('pointerdown', onPointerDown);
+    }, [tagMenuOpen]);
+
+    const handleRecalcNextBilling = () => {
+        const next = calculateNextBillingDate(
+            form.startDate || todayStr,
+            form.billingCycle,
+            undefined,
+            form.customIntervalDays || 1
+        );
+        setForm((prev) => ({ ...prev, nextBillingDate: next }));
+    };
+
+    const handleNextBillingDateChange = (val: string) => {
+        setForm((prev) => ({ ...prev, nextBillingDate: val }));
+    };
 
     const handleStartDateChange = (newStartDate: string) => {
-        const next = calculateNextBillingDate(newStartDate, form.billingCycle, undefined, form.customIntervalDays || 1);
+        const next = calculateNextBillingDate(
+            newStartDate,
+            form.billingCycle,
+            undefined,
+            form.customIntervalDays || 1
+        );
         setForm((prev) => ({
             ...prev,
             startDate: newStartDate,
@@ -204,6 +446,20 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         setInputCurrency(targetCurrency);
     };
 
+    const handleTagInputChange = (value: string) => {
+        if (value.includes(',')) {
+            const parts = value.split(',');
+            const completed = parts.slice(0, -1).map((p) => p.trim()).filter(Boolean);
+            const rest = parts[parts.length - 1] ?? '';
+            if (completed.length > 0) commitTagNames(completed);
+            setTagQuery(rest);
+            setTagMenuOpen(Boolean(rest.trim()));
+            return;
+        }
+        setTagQuery(value);
+        setTagMenuOpen(Boolean(value.trim()));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const numVal = parseFloat(rawPriceInput);
@@ -220,6 +476,34 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 undefined,
                 form.customIntervalDays || 1
             );
+            const selectedCat = categories.find((c) => c.key === form.category);
+
+            // Commit leftover query text as a tag name
+            const leftover = tagQuery.trim();
+            const namesToCreate = [
+                ...pendingTagNames,
+                ...(leftover && !isNameAlreadySelected(leftover) ? [leftover] : []),
+            ];
+
+            const resolvedIds = [...(form.tagIds || [])];
+            for (const name of namesToCreate) {
+                const existing = findExactTag(name);
+                if (existing) {
+                    if (!resolvedIds.includes(existing.id)) resolvedIds.push(existing.id);
+                    continue;
+                }
+                const created = await addTag({ nameTh: name, nameEn: name });
+                if (!resolvedIds.includes(created.id)) resolvedIds.push(created.id);
+            }
+
+            const resolvedProjectIds = await resolvePendingChipNames(
+                pendingProjectNames,
+                projectQueryLeftover,
+                form.projectIds || [],
+                projects,
+                async (name) => addProject({ nameTh: name, nameEn: name })
+            );
+
             const payload: SubscriptionInput = {
                 ...form,
                 price: finalThbPrice,
@@ -227,6 +511,10 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 customIntervalDays: form.billingCycle === 'daily' ? (form.customIntervalDays || 1) : undefined,
                 startDate: form.startDate || todayStr,
                 nextBillingDate: form.nextBillingDate?.trim() || computedNextDate,
+                categoryId: selectedCat?.id || form.categoryId || null,
+                tagIds: resolvedIds,
+                tagId: resolvedIds[0] || null,
+                projectIds: resolvedProjectIds,
             };
             await onSave(payload);
             onClose();
@@ -268,11 +556,11 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                             >
                                 <span className="flex items-center gap-1.5 font-semibold text-foreground">
                                     <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                                    {language === 'th' ? 'เลือกจากบริการยอดนิยม (Quick Add)' : 'Popular Presets (Quick Add)'}
+                                    {t.modals.popularPresets}
                                 </span>
                                 <div className="flex items-center gap-1">
                                     <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-mono">
-                                        {POPULAR_PRESETS.length} รายการ
+                                        {t.modals.itemsCount.replace('{count}', String(POPULAR_PRESETS.length))}
                                     </span>
                                     {showPresets ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
                                 </div>
@@ -370,7 +658,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                                     <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20 space-y-1 text-xs animate-in fade-in slide-in-from-top-1">
                                         <div className="flex items-center justify-between font-medium">
                                             <span className="text-foreground text-[11px]">
-                                                {language === 'th' ? 'แปลงเป็นเงินบาทอัตโนมัติ:' : 'Auto Converted to THB:'}
+                                                {t.modals.autoConvertThb}
                                             </span>
                                             <span className="font-bold text-primary text-sm">
                                                 ฿{convertUsdToThb(parseFloat(rawPriceInput) || 0, usdRate).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
@@ -378,11 +666,12 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                                         </div>
                                         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                                             <span>
-                                                1 USD ≈ ฿{usdRate} {isRateFallback ? '(Fallback Rate)' : '(Live Rate)'}
+                                                1 USD ≈ ฿{usdRate}{' '}
+                                                {isRateFallback ? t.modals.fallbackRate : t.modals.liveRate}
                                             </span>
                                             {isRateLoading && (
                                                 <span className="animate-pulse flex items-center gap-1 text-primary">
-                                                    <RefreshCw className="w-2.5 h-2.5 animate-spin" /> อัปเดตเรท...
+                                                    <RefreshCw className="w-2.5 h-2.5 animate-spin" /> {t.modals.updatingRate}
                                                 </span>
                                             )}
                                         </div>
@@ -403,11 +692,11 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="monthly">{t.modals.cycleMonthly}</SelectItem>
-                                        <SelectItem value="half_yearly">{t.modals.cycleHalfYearly || 'รายครึ่งปี (6 เดือน)'}</SelectItem>
+                                        <SelectItem value="half_yearly">{t.modals.cycleHalfYearly}</SelectItem>
                                         <SelectItem value="yearly">{t.modals.cycleYearly}</SelectItem>
                                         <SelectItem value="quarterly">{t.modals.cycleQuarterly}</SelectItem>
                                         <SelectItem value="weekly">{t.modals.cycleWeekly}</SelectItem>
-                                        <SelectItem value="daily">{t.modals.cycleDaily || 'รายวัน (กำหนดจำนวนวัน)'}</SelectItem>
+                                        <SelectItem value="daily">{t.modals.cycleDaily}</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -417,7 +706,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                         {form.billingCycle === 'daily' && (
                             <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
                                 <Label htmlFor="customDays" className="text-xs font-medium text-indigo-300">
-                                    {t.modals.customIntervalDays || 'ตัดรอบทุกๆ (จำนวนวัน)'} *
+                                    {t.modals.customIntervalDays} *
                                 </Label>
                                 <div className="flex items-center gap-2">
                                     <Input
@@ -431,7 +720,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                                         className="bg-background"
                                     />
                                     <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                        {t.modals.daysUnit || 'วัน'}
+                                        {t.modals.daysUnit}
                                     </span>
                                 </div>
                             </div>
@@ -442,7 +731,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                             <div className="space-y-1.5">
                                 <Label htmlFor="startDate" className="text-xs font-medium flex items-center gap-1">
                                     <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                                    {t.modals.startDate || 'วันที่เริ่มสมัครสมาชิก'}
+                                    {t.modals.startDate}
                                 </Label>
                                 <ThaiDatePicker
                                     id="startDate"
@@ -450,24 +739,39 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                                     onChange={handleStartDateChange}
                                     language={language}
                                     showFullSubtitle={true}
+                                    required
                                 />
                             </div>
 
                             <div className="space-y-1.5">
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between gap-2">
                                     <Label htmlFor="nextBillingDate" className="text-xs font-medium flex items-center gap-1">
                                         <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                                         {t.modals.nextBillingDate}
                                     </Label>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleRecalcNextBilling}
+                                        className="h-5 px-1.5 text-[11px] text-muted-foreground hover:text-foreground gap-1"
+                                    >
+                                        <RefreshCw className="w-3 h-3" />
+                                        {t.modals.autoCalc}
+                                    </Button>
                                 </div>
                                 <ThaiDatePicker
                                     id="nextBillingDate"
-                                    placeholder={language === 'th' ? 'เว้นว่างเพื่อคำนวณอัตโนมัติ' : 'Leave empty to auto-calculate'}
+                                    placeholder={t.modals.pickOrAutoCalc}
                                     value={form.nextBillingDate || ''}
-                                    onChange={(val) => setForm({ ...form, nextBillingDate: val })}
+                                    onChange={handleNextBillingDateChange}
                                     language={language}
                                     showFullSubtitle={true}
+                                    required
                                 />
+                                <p className="text-[11px] text-muted-foreground px-0.5">
+                                    {t.modals.autoCalculatedHint}
+                                </p>
                             </div>
                         </div>
 
@@ -486,12 +790,19 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                                         className="h-5 px-1.5 text-[11px] text-muted-foreground hover:text-foreground gap-1"
                                     >
                                         <Settings2 className="w-3 h-3" />
-                                        {language === 'th' ? 'จัดการ' : 'Manage'}
+                                        {t.modals.manage}
                                     </Button>
                                 </div>
                                 <Select
                                     value={form.category}
-                                    onValueChange={(val) => setForm({ ...form, category: val })}
+                                    onValueChange={(val) => {
+                                        const selectedCat = categories.find((c) => c.key === val);
+                                        setForm({
+                                            ...form,
+                                            category: val,
+                                            categoryId: selectedCat?.id || null,
+                                        });
+                                    }}
                                 >
                                     <SelectTrigger id="category" className="w-full">
                                         <SelectValue />
@@ -528,6 +839,136 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                             </div>
                         </div>
 
+                        {/* Tag multi autocomplete */}
+                        <div className="space-y-1.5" ref={tagWrapRef}>
+                            <Label htmlFor="tag" className="text-xs font-medium">
+                                {t.modals.tag}
+                                <span className="ml-1.5 font-normal text-muted-foreground">
+                                    ({t.modals.tagHint})
+                                </span>
+                            </Label>
+
+                            {(selectedTagItems.length > 0 || pendingTagNames.length > 0) && (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {selectedTagItems.map((tag) => (
+                                        <span
+                                            key={tag.id}
+                                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs ${tag.bg || 'bg-sky-500/10 border-sky-500/20'} ${tag.color || 'text-sky-400'}`}
+                                        >
+                                            {tagLabel(tag)}
+                                            <button
+                                                type="button"
+                                                className="opacity-70 hover:opacity-100"
+                                                onClick={() => removeSelectedTagId(tag.id)}
+                                                aria-label="Remove tag"
+                                            >
+                                                ×
+                                            </button>
+                                        </span>
+                                    ))}
+                                    {pendingTagNames.map((name) => (
+                                        <span
+                                            key={`pending-${name}`}
+                                            className="inline-flex items-center gap-1 rounded-md border border-dashed border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400"
+                                        >
+                                            {name}
+                                            <button
+                                                type="button"
+                                                className="opacity-70 hover:opacity-100"
+                                                onClick={() => removePendingName(name)}
+                                                aria-label="Remove tag"
+                                            >
+                                                ×
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="relative">
+                                <Input
+                                    id="tag"
+                                    autoComplete="off"
+                                    placeholder={t.modals.tagPlaceholder}
+                                    value={tagQuery}
+                                    onChange={(e) => handleTagInputChange(e.target.value)}
+                                    onFocus={() => {
+                                        if (tagQuery.trim()) setTagMenuOpen(true);
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Escape') {
+                                            setTagMenuOpen(false);
+                                            return;
+                                        }
+                                        if (e.key === 'Enter' || e.key === 'Tab') {
+                                            if (tagQuery.trim()) {
+                                                e.preventDefault();
+                                                commitTagQuery();
+                                            }
+                                        }
+                                        if (e.key === 'Backspace' && !tagQuery) {
+                                            if (pendingTagNames.length > 0) {
+                                                removePendingName(pendingTagNames[pendingTagNames.length - 1]);
+                                            } else if ((form.tagIds || []).length > 0) {
+                                                const last = form.tagIds![form.tagIds!.length - 1];
+                                                removeSelectedTagId(last);
+                                            }
+                                        }
+                                    }}
+                                />
+                                {tagMenuOpen && tagQuery.trim() && (
+                                    <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md">
+                                        {tagSearching && tagSuggestions.length === 0 ? (
+                                            <div className="px-3 py-2 text-xs text-muted-foreground">
+                                                {t.modals.tagSearching}
+                                            </div>
+                                        ) : tagSuggestions.filter((s) => !(form.tagIds || []).includes(s.id)).length > 0 ? (
+                                            <ul className="max-h-48 overflow-y-auto py-1">
+                                                {tagSuggestions
+                                                    .filter((s) => !(form.tagIds || []).includes(s.id))
+                                                    .map((tag) => (
+                                                        <li key={tag.id}>
+                                                            <button
+                                                                type="button"
+                                                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                                                onMouseDown={(e) => e.preventDefault()}
+                                                                onClick={() => addTagByItem(tag)}
+                                                            >
+                                                                <span
+                                                                    className={`h-2 w-2 shrink-0 rounded-full ${tag.bg || 'bg-sky-500/40'}`}
+                                                                />
+                                                                <span>{tagLabel(tag)}</span>
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                            </ul>
+                                        ) : (
+                                            <div className="px-3 py-2 text-xs text-muted-foreground">
+                                                {t.modals.tagCreateHint.replace('{name}', tagQuery.trim())}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <MultiChipAutocomplete
+                            label={t.modals.project}
+                            hint={t.modals.projectHint}
+                            placeholder={t.modals.projectPlaceholder}
+                            searchingLabel={t.modals.projectSearching}
+                            createHint={(name) => t.modals.projectCreateHint.replace('{name}', name)}
+                            language={language}
+                            items={projects}
+                            selectedIds={form.projectIds || []}
+                            pendingNames={pendingProjectNames}
+                            onSelectedIdsChange={(ids) => setForm((prev) => ({ ...prev, projectIds: ids }))}
+                            onPendingNamesChange={setPendingProjectNames}
+                            onSearch={searchProjects}
+                            onCreate={async (name) => addProject({ nameTh: name, nameEn: name })}
+                            onQueryChange={setProjectQueryLeftover}
+                        />
+
                         {/* Reminder Days & (if edit) Status */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5">
@@ -542,11 +983,11 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="1">1 วันล่วงหน้า (1 day)</SelectItem>
-                                        <SelectItem value="2">2 วันล่วงหน้า (2 days)</SelectItem>
-                                        <SelectItem value="3">3 วันล่วงหน้า (3 days)</SelectItem>
-                                        <SelectItem value="5">5 วันล่วงหน้า (5 days)</SelectItem>
-                                        <SelectItem value="7">7 วันล่วงหน้า (7 days)</SelectItem>
+                                        {[1, 2, 3, 5, 7].map((days) => (
+                                            <SelectItem key={days} value={String(days)}>
+                                                {t.modals.reminderDayOption.replace(/\{days\}/g, String(days))}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -575,12 +1016,12 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                         {/* Notes / บันทึกเพิ่มเติม */}
                         <div className="space-y-1.5">
                             <Label htmlFor="notes" className="text-xs font-medium flex items-center justify-between">
-                                <span>{t.modals.notes || 'บันทึกเพิ่มเติม'}</span>
-                                <span className="text-[10px] text-muted-foreground font-normal">Optional</span>
+                                <span>{t.modals.notes}</span>
+                                <span className="text-[10px] text-muted-foreground font-normal">{t.modals.optional}</span>
                             </Label>
                             <Textarea
                                 id="notes"
-                                placeholder={language === 'th' ? 'เช่น รายละเอียดแพ็กเกจ, สมาชิกในกลุ่ม, วันที่ต่ออายุอัตโนมัติ...' : 'Add any notes, plan details or account info...'}
+                                placeholder={t.modals.notesPlaceholder}
                                 value={form.notes || ''}
                                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                                 className="text-xs min-h-[68px]"

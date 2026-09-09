@@ -19,8 +19,39 @@ function formatDateToISO(date: Date): string {
 }
 
 /**
+ * เลื่อนวันที่ไปข้างหน้า 1 รอบการชำระ
+ */
+function advanceByCycle(date: Date, cycle: BillingCycle, customIntervalDays = 1): void {
+    const intervalDays = Math.max(1, Number(customIntervalDays) || 1);
+    switch (cycle) {
+        case 'daily':
+            date.setDate(date.getDate() + intervalDays);
+            break;
+        case 'weekly':
+            date.setDate(date.getDate() + 7);
+            break;
+        case 'monthly':
+            date.setMonth(date.getMonth() + 1);
+            break;
+        case 'quarterly':
+            date.setMonth(date.getMonth() + 3);
+            break;
+        case 'half_yearly':
+            date.setMonth(date.getMonth() + 6);
+            break;
+        case 'yearly':
+            date.setFullYear(date.getFullYear() + 1);
+            break;
+        default:
+            date.setMonth(date.getMonth() + 1);
+            break;
+    }
+}
+
+/**
  * คำนวณวันตัดรอบบิลถัดไปอัตโนมัติจาก วันที่เริ่มสมัคร และ รอบการชำระเงิน
- * โดยจะทำการทบรอบบิลไปข้างหน้า (Roll forward) จนกว่าจะได้วันในอนาคต (หรือวันนี้)
+ * - บวกอย่างน้อย 1 รอบจากวันเริ่ม (เช่น เริ่ม 20 ก.ย. รายเดือน → 20 ต.ค.)
+ * - ถ้ายังไม่ถึงอนาคต ให้ทบรอบต่อจนเกินวันนี้
  */
 export function calculateNextBillingDate(
     startDateStr: string,
@@ -50,43 +81,18 @@ export function calculateNextBillingDate(
     }
     today.setHours(0, 0, 0, 0);
 
-    // หากวันที่เริ่มอยู่ในอนาคต ให้ใช้วันที่เริ่มเป็นวันตัดรอบบิลถัดไป
-    if (start > today) {
-        return formatDateToISO(start);
-    }
-
     const current = new Date(start);
-    const intervalDays = Math.max(1, Number(customIntervalDays) || 1);
-
-    // ทบรอบไปข้างหน้าจนกว่าจะมากกว่าหรือเท่ากับวันนี้ (พร้อม loop guard สูงสุด 1,000 รอบ)
-    let iterations = 0;
     const MAX_ITERATIONS = 1000;
+    let iterations = 0;
 
+    // รอบแรก: วันตัดรอบถัดไป = วันเริ่ม + 1 รอบเสมอ
+    advanceByCycle(current, cycle, customIntervalDays);
+    iterations++;
+
+    // ถ้ายังไม่พ้นวันนี้ ให้ทบต่อ (กรณีเริ่มสมัครในอดีต)
     while (current <= today && iterations < MAX_ITERATIONS) {
+        advanceByCycle(current, cycle, customIntervalDays);
         iterations++;
-        switch (cycle) {
-            case 'daily':
-                current.setDate(current.getDate() + intervalDays);
-                break;
-            case 'weekly':
-                current.setDate(current.getDate() + 7);
-                break;
-            case 'monthly':
-                current.setMonth(current.getMonth() + 1);
-                break;
-            case 'quarterly':
-                current.setMonth(current.getMonth() + 3);
-                break;
-            case 'half_yearly':
-                current.setMonth(current.getMonth() + 6);
-                break;
-            case 'yearly':
-                current.setFullYear(current.getFullYear() + 1);
-                break;
-            default:
-                current.setMonth(current.getMonth() + 1);
-                break;
-        }
     }
 
     return formatDateToISO(current);
@@ -115,32 +121,7 @@ export function advanceNextBillingDate(
         return calculateNextBillingDate(formatDateToISO(new Date()), cycle, new Date(), customIntervalDays);
     }
 
-    const intervalDays = Math.max(1, Number(customIntervalDays) || 1);
-
-    switch (cycle) {
-        case 'daily':
-            date.setDate(date.getDate() + intervalDays);
-            break;
-        case 'weekly':
-            date.setDate(date.getDate() + 7);
-            break;
-        case 'monthly':
-            date.setMonth(date.getMonth() + 1);
-            break;
-        case 'quarterly':
-            date.setMonth(date.getMonth() + 3);
-            break;
-        case 'half_yearly':
-            date.setMonth(date.getMonth() + 6);
-            break;
-        case 'yearly':
-            date.setFullYear(date.getFullYear() + 1);
-            break;
-        default:
-            date.setMonth(date.getMonth() + 1);
-            break;
-    }
-
+    advanceByCycle(date, cycle, customIntervalDays);
     return formatDateToISO(date);
 }
 

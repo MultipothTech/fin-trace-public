@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { UrgentAlertBanner } from './urgent-alert-banner';
+import { TagExpensePie, buildTagExpenseSlices, buildLabeledExpenseSlices } from './tag-expense-pie';
 import { useApp } from '@/providers/app-store';
 import { TRANSLATIONS } from '@/config/constants';
 import { calculateDaysRemaining } from '@/features/notifications/services/notification-service';
@@ -91,10 +92,10 @@ const WIDGET_METAS: Record<string, {
         color: 'text-purple-400 bg-purple-500/10',
     },
     category_breakdown: {
-        titleTh: 'สัดส่วนตามหมวดหมู่',
-        titleEn: 'Category Breakdown Chart',
-        descTh: 'กราฟแท่งแสดงสัดส่วนค่าใช้จ่ายแยกตามหมวดหมู่',
-        descEn: 'Visual expense distribution by category',
+        titleTh: 'สัดส่วนตามหมวดหมู่ / แท็ก',
+        titleEn: 'Category & Tag Breakdown',
+        descTh: 'กราฟแสดงสัดส่วนค่าใช้จ่ายแยกตามหมวดหมู่และแท็ก',
+        descEn: 'Expense distribution by category and tag',
         icon: PieChart,
         color: 'text-emerald-400 bg-emerald-500/10',
     },
@@ -113,6 +114,8 @@ export const OverviewContent: React.FC<OverviewContentProps> = ({ setView = () =
         subscriptions,
         urgentSubscriptions,
         categories,
+        tags,
+        projects,
         transactions,
         monthlyTotal,
         yearlyTotal,
@@ -140,6 +143,8 @@ export const OverviewContent: React.FC<OverviewContentProps> = ({ setView = () =
 
     // Category distribution
     const categoryTotals: Record<string, number> = {};
+    const tagMonthlyEntries: Array<{ tagId: string | null | undefined; amount: number }> = [];
+    const projectMonthlyEntries: Array<{ id: string | null | undefined; amount: number }> = [];
     subscriptions.forEach((sub) => {
         if (sub.status === 'active') {
             let val = sub.price;
@@ -150,8 +155,25 @@ export const OverviewContent: React.FC<OverviewContentProps> = ({ setView = () =
             else if (sub.billingCycle === 'daily') val = (sub.price / (sub.customIntervalDays || 1)) * 30.416;
 
             categoryTotals[sub.category] = (categoryTotals[sub.category] || 0) + val;
+            const ids = sub.tagIds?.length ? sub.tagIds : sub.tagId ? [sub.tagId] : [];
+            if (ids.length === 0) {
+                tagMonthlyEntries.push({ tagId: null, amount: val });
+            } else {
+                const share = val / ids.length;
+                ids.forEach((tid) => tagMonthlyEntries.push({ tagId: tid, amount: share }));
+            }
+
+            const pids = sub.projectIds || [];
+            if (pids.length === 0) {
+                projectMonthlyEntries.push({ id: null, amount: val });
+            } else {
+                const share = val / pids.length;
+                pids.forEach((pid) => projectMonthlyEntries.push({ id: pid, amount: share }));
+            }
         }
     });
+    const tagSlices = buildTagExpenseSlices(tagMonthlyEntries, tags, language);
+    const projectSlices = buildLabeledExpenseSlices(projectMonthlyEntries, projects, language);
 
     const handleSaveNewSub = async (input: SubscriptionInput) => {
         await addSubscription(input);
@@ -376,39 +398,69 @@ export const OverviewContent: React.FC<OverviewContentProps> = ({ setView = () =
                             </h3>
                         </div>
 
-                        <div className="space-y-3.5 pt-3">
-                            {Object.entries(categoryTotals).length > 0 ? (
-                                Object.entries(categoryTotals).map(([catKey, total]) => {
-                                    const { label: catLabel, Icon: IconComp, color: catColor } = resolveCategory(catKey, categories, language);
-                                    const percentage = monthlyTotal > 0 ? Math.round((total / monthlyTotal) * 100) : 0;
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 pt-3">
+                            {/* Category bars */}
+                            <div className="space-y-3.5 lg:col-span-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {language === 'th' ? 'หมวดหมู่' : 'Categories'}
+                                </p>
+                                {Object.entries(categoryTotals).length > 0 ? (
+                                    Object.entries(categoryTotals).map(([catKey, total]) => {
+                                        const { label: catLabel, Icon: IconComp, color: catColor } = resolveCategory(catKey, categories, language);
+                                        const percentage = monthlyTotal > 0 ? Math.round((total / monthlyTotal) * 100) : 0;
 
-                                    return (
-                                        <div key={catKey} className="space-y-1.5">
-                                            <div className="flex items-center justify-between text-xs">
-                                                <div className="flex items-center gap-2">
-                                                    <IconComp className={`w-3.5 h-3.5 ${catColor}`} />
-                                                    <span className="font-medium text-foreground">
-                                                        {catLabel}
+                                        return (
+                                            <div key={catKey} className="space-y-1.5">
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <div className="flex items-center gap-2">
+                                                        <IconComp className={`w-3.5 h-3.5 ${catColor}`} />
+                                                        <span className="font-medium text-foreground">
+                                                            {catLabel}
+                                                        </span>
+                                                    </div>
+                                                    <span className="text-muted-foreground">
+                                                        ฿{Math.round(total).toLocaleString()} ({percentage}%)
                                                     </span>
                                                 </div>
-                                                <span className="text-muted-foreground">
-                                                    ฿{Math.round(total).toLocaleString()} ({percentage}%)
-                                                </span>
+                                                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full transition-all duration-500 bg-primary"
+                                                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                                                    />
+                                                </div>
                                             </div>
-                                            <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                                                <div
-                                                    className="h-full rounded-full transition-all duration-500 bg-primary"
-                                                    style={{ width: `${Math.min(percentage, 100)}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            ) : (
-                                <div className="text-center py-8 text-xs text-muted-foreground">
-                                    {t.overview.noSubscriptions}
-                                </div>
-                            )}
+                                        );
+                                    })
+                                ) : (
+                                    <div className="text-center py-8 text-xs text-muted-foreground">
+                                        {t.overview.noSubscriptions}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Tag pie */}
+                            <div className="space-y-2 border-t border-border pt-4">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {t.overview.tagBreakdown}
+                                </p>
+                                <TagExpensePie
+                                    slices={tagSlices}
+                                    monthlyTotal={monthlyTotal}
+                                    language={language}
+                                />
+                            </div>
+
+                            {/* Project pie */}
+                            <div className="space-y-2 border-t border-border pt-4">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {t.overview.projectBreakdown}
+                                </p>
+                                <TagExpensePie
+                                    slices={projectSlices}
+                                    monthlyTotal={monthlyTotal}
+                                    language={language}
+                                />
+                            </div>
                         </div>
                     </Card>
                 );

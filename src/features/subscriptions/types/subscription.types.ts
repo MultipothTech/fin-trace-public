@@ -13,6 +13,38 @@ export interface CategoryItem {
     isSystem?: boolean;
 }
 
+export interface TagItem {
+    id: string;
+    nameEn: string;
+    nameTh: string;
+    color?: string;
+    bg?: string;
+    createdAt?: string;
+}
+
+export interface TagInput {
+    nameEn: string;
+    nameTh: string;
+    color?: string;
+    bg?: string;
+}
+
+export interface ProjectItem {
+    id: string;
+    nameEn: string;
+    nameTh: string;
+    color?: string;
+    bg?: string;
+    createdAt?: string;
+}
+
+export interface ProjectInput {
+    nameEn: string;
+    nameTh: string;
+    color?: string;
+    bg?: string;
+}
+
 export interface Subscription {
     id: string;
     userId?: string;
@@ -20,15 +52,19 @@ export interface Subscription {
     price: number;
     currency: string;
     billingCycle: BillingCycle;
-    customIntervalDays?: number; // สำหรับรอบชำระรายวัน (กำหนดจำนวนวัน เช่น ทุกๆ 1 วัน, ทุก 15 วัน)
+    customIntervalDays?: number;
     startDate: string; // YYYY-MM-DD
     nextBillingDate: string; // YYYY-MM-DD
+    /** category key (resolved) for UI helpers */
     category: string;
+    categoryId?: string | null;
+    /** @deprecated use tagIds — kept for backward compat (first tag) */
+    tagId?: string | null;
+    tagIds?: string[];
+    projectIds?: string[];
     paymentMethod: string;
-    reminderDays: number; // default 3
+    reminderDays: number;
     status: SubscriptionStatus;
-    icon?: string;
-    color?: string;
     notes?: string;
     createdAt?: string;
     updatedAt?: string;
@@ -42,7 +78,12 @@ export interface SubscriptionInput {
     customIntervalDays?: number;
     startDate?: string;
     nextBillingDate?: string;
-    category: string;
+    category?: string;
+    categoryId?: string | null;
+    /** @deprecated use tagIds */
+    tagId?: string | null;
+    tagIds?: string[];
+    projectIds?: string[];
     paymentMethod?: string;
     reminderDays?: number;
     status?: SubscriptionStatus;

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
-import { Globe, Moon, Sun, Monitor, Bell, BellOff, Download, Smartphone, FolderKanban, ChevronRight, Share, MoreVertical, Laptop, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Globe, Moon, Sun, Monitor, Bell, BellOff, Download, Smartphone, FolderKanban, ChevronRight, Share, MoreVertical, Laptop, CheckCircle2, AlertCircle, Tags } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +21,8 @@ import { useAuth, type AppUser } from '@/providers/auth-provider';
 import { TRANSLATIONS } from '@/config/constants';
 import { requestNotificationPermission } from '@/features/notifications/services/notification-service';
 import { CategoryManagerModal } from '@/features/subscriptions/components/category-manager-modal';
+import { TagManagerModal } from '@/features/tags/components/tag-manager-modal';
+import { ProjectManagerModal } from '@/features/projects/components/project-manager-modal';
 
 export interface SettingsContentProps {
     user?: AppUser | {
@@ -32,13 +34,15 @@ export interface SettingsContentProps {
 }
 
 export const SettingsContent: React.FC<SettingsContentProps> = ({ user }) => {
-    const { language, setLanguage, categories, settings, updateSettings } = useApp();
+    const { language, setLanguage, categories, tags, projects, settings, updateSettings } = useApp();
     const { signOut } = useAuth();
     const { setTheme, theme } = useTheme();
     const t = TRANSLATIONS[language] || TRANSLATIONS.th;
 
     const [notificationPerm, setNotificationPerm] = useState<string>('default');
     const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+    const [tagModalOpen, setTagModalOpen] = useState(false);
+    const [projectModalOpen, setProjectModalOpen] = useState(false);
     const [pwaModalOpen, setPwaModalOpen] = useState(false);
     const [isStandalone, setIsStandalone] = useState(false);
 
@@ -248,6 +252,74 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({ user }) => {
                 </Card>
             </section>
 
+            {/* Tags Management Section */}
+            <section className="space-y-4 pt-6 border-t border-border">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    {language === 'th' ? 'แท็ก' : 'Tags'}
+                </h3>
+
+                <Card className="p-4 bg-card border-border flex flex-row items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 bg-sky-500/10 text-sky-400 rounded-lg shrink-0">
+                            <Tags className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">
+                                {language === 'th' ? 'จัดการแท็ก' : 'Manage Tags'}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                                {language === 'th'
+                                    ? `มีทั้งหมด ${tags.length} แท็ก (ใช้กับแพ็กเกจและประวัติชำระ)`
+                                    : `${tags.length} tags (for subscriptions & payment history)`}
+                            </p>
+                        </div>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTagModalOpen(true)}
+                        className="text-xs gap-1.5 shrink-0"
+                    >
+                        {language === 'th' ? 'จัดการ' : 'Manage'}
+                        <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                </Card>
+            </section>
+
+            {/* Projects Management Section */}
+            <section className="space-y-4 pt-6 border-t border-border">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    {language === 'th' ? 'โปรเจค' : 'Projects'}
+                </h3>
+
+                <Card className="p-4 bg-card border-border flex flex-row items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 bg-violet-500/10 text-violet-400 rounded-lg shrink-0">
+                            <FolderKanban className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">
+                                {language === 'th' ? 'จัดการโปรเจค' : 'Manage Projects'}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                                {language === 'th'
+                                    ? `มีทั้งหมด ${projects.length} โปรเจค (ใช้กับแพ็กเกจและประวัติชำระ)`
+                                    : `${projects.length} projects (for subscriptions & payment history)`}
+                            </p>
+                        </div>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setProjectModalOpen(true)}
+                        className="text-xs gap-1.5 shrink-0"
+                    >
+                        {language === 'th' ? 'จัดการ' : 'Manage'}
+                        <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                </Card>
+            </section>
+
             {/* Appearance & Language Section */}
             <section className="space-y-4 pt-6 border-t border-border">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -358,6 +430,18 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({ user }) => {
             <CategoryManagerModal
                 isOpen={categoryModalOpen}
                 onClose={() => setCategoryModalOpen(false)}
+                language={language}
+            />
+
+            {/* Tag Manager Modal */}
+            <TagManagerModal
+                isOpen={tagModalOpen}
+                onClose={() => setTagModalOpen(false)}
+                language={language}
+            />
+            <ProjectManagerModal
+                isOpen={projectModalOpen}
+                onClose={() => setProjectModalOpen(false)}
                 language={language}
             />
 

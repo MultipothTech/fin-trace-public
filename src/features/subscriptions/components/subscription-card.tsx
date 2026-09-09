@@ -11,6 +11,8 @@ import {
     FileText,
     CheckCircle2,
     History,
+    Tags,
+    FolderKanban,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -49,12 +51,31 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
     onMarkAsPaid,
     onViewHistory,
 }) => {
-    const { categories, transactions } = useApp();
+    const { categories, tags, projects, transactions } = useApp();
     const t = TRANSLATIONS[language] || TRANSLATIONS.th;
     const isTh = language === 'th';
 
     // ตรวจสอบว่าบริการนี้ในรอบนี้ถูกบันทึกว่าชำระแล้วหรือไม่
     const isPaid = isSubscriptionPaidForCurrentCycle(subscription, transactions);
+
+    const subTagIds =
+        subscription.tagIds?.length
+            ? subscription.tagIds
+            : subscription.tagId
+              ? [subscription.tagId]
+              : [];
+    const subTags = subTagIds
+        .map((id) => tags.find((tag) => tag.id === id))
+        .filter((tag): tag is NonNullable<typeof tag> => Boolean(tag));
+    const subProjects = (subscription.projectIds || [])
+        .map((id) => projects.find((p) => p.id === id))
+        .filter((p): p is NonNullable<typeof p> => Boolean(p));
+    const chipLabel = (item: { nameTh: string; nameEn: string }) =>
+        (isTh ? item.nameTh : item.nameEn) || item.nameEn || item.nameTh;
+
+    const hasNotes = Boolean(subscription.notes && subscription.notes.trim() !== '');
+    const hasTags = subTags.length > 0;
+    const hasProjects = subProjects.length > 0;
 
     // Resolve category (first check context categories, then default constants mapping)
     const { label: catLabel, Icon: IconComponent, color: catColor, bg: catBg } = resolveCategory(
@@ -232,11 +253,51 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
                 )}
             </div>
 
-            {/* Notes display */}
-            {subscription.notes && subscription.notes.trim() !== '' && (
-                <div className="mt-2.5 pt-2 border-t border-border/40 text-[11px] text-muted-foreground flex items-start gap-1.5 bg-muted/30 -mx-4 -mb-1 px-4 py-1.5">
-                    <FileText className="w-3 h-3 text-amber-500/80 shrink-0 mt-0.5" />
-                    <span className="line-clamp-2 leading-relaxed break-words">{subscription.notes}</span>
+            {/* Notes + Tags + Projects */}
+            {(hasNotes || hasTags || hasProjects) && (
+                <div className="mt-2.5 pt-2 border-t border-border/40 space-y-2 bg-muted/30 -mx-4 -mb-1 px-4 py-1.5">
+                    {hasNotes && (
+                        <div className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                            <FileText className="w-3 h-3 text-amber-500/80 shrink-0 mt-0.5" />
+                            <span className="line-clamp-2 leading-relaxed break-words">
+                                {subscription.notes}
+                            </span>
+                        </div>
+                    )}
+                    {hasTags && (
+                        <div className="flex items-start gap-1.5">
+                            <Tags className="w-3 h-3 text-sky-500/80 shrink-0 mt-1" />
+                            <div className="flex flex-wrap gap-1 min-w-0">
+                                {subTags.map((tag) => (
+                                    <span
+                                        key={tag.id}
+                                        className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+                                            tag.bg || 'bg-sky-500/10 border-sky-500/20'
+                                        } ${tag.color || 'text-sky-400'}`}
+                                    >
+                                        {chipLabel(tag)}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {hasProjects && (
+                        <div className="flex items-start gap-1.5">
+                            <FolderKanban className="w-3 h-3 text-violet-500/80 shrink-0 mt-1" />
+                            <div className="flex flex-wrap gap-1 min-w-0">
+                                {subProjects.map((project) => (
+                                    <span
+                                        key={project.id}
+                                        className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+                                            project.bg || 'bg-violet-500/10 border-violet-500/20'
+                                        } ${project.color || 'text-violet-400'}`}
+                                    >
+                                        {chipLabel(project)}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </Card>

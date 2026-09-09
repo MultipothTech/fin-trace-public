@@ -5,9 +5,34 @@ interface RouteParams {
     params: Promise<{ id: string }>;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function mapCategory(item: {
+    id: string;
+    key: string;
+    name_en: string;
+    name_th: string;
+    icon?: string | null;
+    color?: string | null;
+    bg?: string | null;
+    is_system?: boolean | null;
+    created_at?: string;
+}) {
+    return {
+        id: item.id,
+        key: item.key,
+        label_en: item.name_en,
+        label_th: item.name_th,
+        icon: item.icon || 'MoreHorizontal',
+        color: item.color || 'text-zinc-400',
+        bg: item.bg || 'bg-zinc-500/10',
+        isSystem: Boolean(item.is_system),
+        createdAt: item.created_at,
+    };
+}
+
 /**
  * PUT /api/categories/[id]
- * แก้ไขหมวดหมู่ที่กำหนดเอง
  */
 export async function PUT(req: Request, { params }: RouteParams) {
     try {
@@ -16,6 +41,13 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        if (!id || !UUID_RE.test(id)) {
+            return NextResponse.json(
+                { error: 'Invalid category id. System placeholders cannot be updated.' },
+                { status: 400 }
+            );
         }
 
         const body = await req.json();
@@ -29,28 +61,41 @@ export async function PUT(req: Request, { params }: RouteParams) {
         if (body.color !== undefined) updatePayload.color = body.color;
         if (body.bg !== undefined) updatePayload.bg = body.bg;
 
+        // Block editing system categories
+        const { data: existing, error: findError } = await supabase
+            .from('categories')
+            .select('id, is_system')
+            .eq('id', id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+        if (findError) {
+            return NextResponse.json({ error: findError.message }, { status: 500 });
+        }
+        if (!existing) {
+            return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+        }
+        if (existing.is_system) {
+            return NextResponse.json({ error: 'System categories cannot be edited' }, { status: 403 });
+        }
+
         const { data, error } = await supabase
             .from('categories')
             .update(updatePayload)
             .eq('id', id)
             .eq('user_id', user.id)
+            .eq('is_system', false)
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
+        if (!data) {
+            return NextResponse.json({ error: 'Category not updated' }, { status: 404 });
+        }
 
-        return NextResponse.json({
-            id: data.id,
-            key: data.key,
-            label_en: data.name_en,
-            label_th: data.name_th,
-            icon: data.icon,
-            color: data.color,
-            bg: data.bg,
-            isSystem: false,
-        });
+        return NextResponse.json(mapCategory(data));
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Server error';
         return NextResponse.json({ error: message }, { status: 500 });
@@ -59,7 +104,6 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
 /**
  * DELETE /api/categories/[id]
- * ลบหมวดหมู่ที่กำหนดเอง
  */
 export async function DELETE(req: Request, { params }: RouteParams) {
     try {
@@ -70,11 +114,30 @@ export async function DELETE(req: Request, { params }: RouteParams) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        if (!id || !UUID_RE.test(id)) {
+            return NextResponse.json({ error: 'Invalid category id' }, { status: 400 });
+        }
+
+        const { data: existing } = await supabase
+            .from('categories')
+            .select('id, is_system')
+            .eq('id', id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+        if (!existing) {
+            return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+        }
+        if (existing.is_system) {
+            return NextResponse.json({ error: 'System categories cannot be deleted' }, { status: 403 });
+        }
+
         const { error } = await supabase
             .from('categories')
             .delete()
             .eq('id', id)
-            .eq('user_id', user.id);
+            .eq('user_id', user.id)
+            .eq('is_system', false);
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });

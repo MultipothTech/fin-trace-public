@@ -5,6 +5,10 @@ export interface Transaction {
     amount: number;
     type: 'income' | 'expense';
     category: string;
+    categoryId?: string | null;
+    tagId?: string | null;
+    tagIds?: string[];
+    projectIds?: string[];
     transactionDate: string; // YYYY-MM-DD
     description: string;
     paymentChannel: string;
@@ -18,6 +22,10 @@ export interface TransactionInput {
     amount: number;
     type?: 'income' | 'expense';
     category?: string;
+    categoryId?: string | null;
+    tagId?: string | null;
+    tagIds?: string[];
+    projectIds?: string[];
     transactionDate?: string;
     description?: string;
     paymentChannel?: string;

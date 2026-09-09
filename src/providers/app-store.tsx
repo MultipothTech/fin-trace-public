@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/providers/auth-provider';
-import type { Subscription, SubscriptionInput, Language, CategoryItem, CategoryInput } from '@/features/subscriptions/types/subscription.types';
+import type { Subscription, SubscriptionInput, Language, CategoryItem, CategoryInput, TagItem, TagInput, ProjectItem, ProjectInput } from '@/features/subscriptions/types/subscription.types';
 import type { UserSettings } from '@/features/settings/types/settings.types';
 import type { Transaction, TransactionInput } from '@/features/transactions/types/transaction.types';
 import {
@@ -18,6 +18,18 @@ import {
     deleteCategory as apiDeleteCat,
 } from '@/features/categories/server/api/categories-api';
 import {
+    getTags,
+    createTag as apiCreateTag,
+    updateTag as apiUpdateTag,
+    deleteTag as apiDeleteTag,
+} from '@/features/tags/server/api/tags-api';
+import {
+    getProjects,
+    createProject as apiCreateProject,
+    updateProject as apiUpdateProject,
+    deleteProject as apiDeleteProject,
+} from '@/features/projects/server/api/projects-api';
+import {
     getTransactions,
     createTransaction as apiCreateTx,
     deleteTransaction as apiDeleteTx,
@@ -30,6 +42,8 @@ interface AppContextType {
     subscriptions: Subscription[];
     urgentSubscriptions: Subscription[];
     categories: CategoryItem[];
+    tags: TagItem[];
+    projects: ProjectItem[];
     transactions: Transaction[];
     monthlyTotal: number;
     yearlyTotal: number;
@@ -44,6 +58,12 @@ interface AppContextType {
     addCategory: (input: CategoryInput) => Promise<CategoryItem>;
     updateCategory: (id: string, input: Partial<CategoryInput>) => Promise<CategoryItem>;
     deleteCategory: (id: string) => Promise<void>;
+    addTag: (input: TagInput) => Promise<TagItem>;
+    updateTag: (id: string, input: Partial<TagInput>) => Promise<TagItem>;
+    deleteTag: (id: string) => Promise<void>;
+    addProject: (input: ProjectInput) => Promise<ProjectItem>;
+    updateProject: (id: string, input: Partial<ProjectInput>) => Promise<ProjectItem>;
+    deleteProject: (id: string) => Promise<void>;
     updateSettings: (newSettings: Partial<UserSettings>) => Promise<void>;
     language: Language;
     setLanguage: (lang: Language) => void;
@@ -71,6 +91,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const { user, isLoading: authLoading } = useAuth();
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
     const [categories, setCategories] = useState<CategoryItem[]>([]);
+    const [tags, setTags] = useState<TagItem[]>([]);
+    const [projects, setProjects] = useState<ProjectItem[]>([]);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
     const [loading, setLoading] = useState(false);
@@ -79,19 +101,22 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         if (!user) return;
         setLoading(true);
         try {
-            const [subs, sets, cats, txs] = await Promise.all([
+            const [subs, sets, cats, tagList, projectList, txs] = await Promise.all([
                 getSubscriptions().catch(() => []),
                 getUserSettings().catch(() => DEFAULT_SETTINGS),
                 getCategories().catch(() => []),
+                getTags().catch(() => []),
+                getProjects().catch(() => []),
                 getTransactions().catch(() => []),
             ]);
             setSubscriptions(subs);
             setCategories(cats);
+            setTags(tagList);
+            setProjects(projectList);
             setTransactions(txs);
             const merged = { ...DEFAULT_SETTINGS, ...sets };
             setSettings(merged);
 
-            // ตรวจสอบและส่งการแจ้งเตือนบิลที่ใกล้ถึงใน 3 วัน (เฉพาะเมื่อเปิดใช้งานการแจ้งเตือน)
             if (merged.notificationEnabled !== false) {
                 const lang = (merged.language === 'en' ? 'en' : 'th') as Language;
                 checkAndTrigger3DayAlerts(subs, lang);
@@ -108,6 +133,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         } else if (!authLoading && !user) {
             setSubscriptions([]);
             setCategories([]);
+            setTags([]);
+            setProjects([]);
             setTransactions([]);
             setSettings(DEFAULT_SETTINGS);
             setLoading(false);
@@ -219,6 +246,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             amount: safeAmount,
             type: 'expense',
             category: sub.category || 'other',
+            categoryId: sub.categoryId || null,
+            tagId: sub.tagId || sub.tagIds?.[0] || null,
+            tagIds: sub.tagIds?.length ? sub.tagIds : sub.tagId ? [sub.tagId] : [],
+            projectIds: sub.projectIds || [],
             transactionDate: paymentDate,
             description: desc,
             paymentChannel: sub.paymentMethod || 'Credit Card',
@@ -285,6 +316,106 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
+    const addTag = async (input: TagInput): Promise<TagItem> => {
+        try {
+            const created = await apiCreateTag(input);
+            setTags((prev) => (prev.some((t) => t.id === created.id) ? prev : [...prev, created]));
+            return created;
+        } catch (err) {
+            console.error('Failed to add tag:', err);
+            throw err;
+        }
+    };
+
+    const updateTag = async (id: string, input: Partial<TagInput>): Promise<TagItem> => {
+        const original = [...tags];
+        try {
+            const updated = await apiUpdateTag(id, input);
+            setTags((prev) => prev.map((t) => (t.id === id ? updated : t)));
+            return updated;
+        } catch (err) {
+            setTags(original);
+            console.error('Failed to update tag:', err);
+            throw err;
+        }
+    };
+
+    const deleteTag = async (id: string): Promise<void> => {
+        try {
+            await apiDeleteTag(id);
+            setTags((prev) => prev.filter((t) => t.id !== id));
+            setSubscriptions((prev) =>
+                prev.map((s) => {
+                    const nextIds = (s.tagIds || (s.tagId ? [s.tagId] : [])).filter((tid) => tid !== id);
+                    return {
+                        ...s,
+                        tagIds: nextIds,
+                        tagId: nextIds[0] || null,
+                    };
+                })
+            );
+            setTransactions((prev) =>
+                prev.map((tx) => {
+                    const nextIds = (tx.tagIds || (tx.tagId ? [tx.tagId] : [])).filter((tid) => tid !== id);
+                    return {
+                        ...tx,
+                        tagIds: nextIds,
+                        tagId: nextIds[0] || null,
+                    };
+                })
+            );
+        } catch (err) {
+            console.error('Failed to delete tag:', err);
+            throw err;
+        }
+    };
+
+    const addProject = async (input: ProjectInput): Promise<ProjectItem> => {
+        try {
+            const created = await apiCreateProject(input);
+            setProjects((prev) => (prev.some((p) => p.id === created.id) ? prev : [...prev, created]));
+            return created;
+        } catch (err) {
+            console.error('Failed to add project:', err);
+            throw err;
+        }
+    };
+
+    const updateProject = async (id: string, input: Partial<ProjectInput>): Promise<ProjectItem> => {
+        const original = [...projects];
+        try {
+            const updated = await apiUpdateProject(id, input);
+            setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
+            return updated;
+        } catch (err) {
+            setProjects(original);
+            console.error('Failed to update project:', err);
+            throw err;
+        }
+    };
+
+    const deleteProject = async (id: string): Promise<void> => {
+        try {
+            await apiDeleteProject(id);
+            setProjects((prev) => prev.filter((p) => p.id !== id));
+            setSubscriptions((prev) =>
+                prev.map((s) => ({
+                    ...s,
+                    projectIds: (s.projectIds || []).filter((pid) => pid !== id),
+                }))
+            );
+            setTransactions((prev) =>
+                prev.map((tx) => ({
+                    ...tx,
+                    projectIds: (tx.projectIds || []).filter((pid) => pid !== id),
+                }))
+            );
+        } catch (err) {
+            console.error('Failed to delete project:', err);
+            throw err;
+        }
+    };
+
     const updateSettings = async (newSettings: Partial<UserSettings>) => {
         try {
             const updated: UserSettings = { ...settings, ...newSettings };
@@ -305,6 +436,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 subscriptions,
                 urgentSubscriptions,
                 categories,
+                tags,
+                projects,
                 transactions,
                 monthlyTotal,
                 yearlyTotal,
@@ -319,6 +452,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 addCategory,
                 updateCategory,
                 deleteCategory,
+                addTag,
+                updateTag,
+                deleteTag,
+                addProject,
+                updateProject,
+                deleteProject,
                 updateSettings,
                 language: (settings.language as Language) || 'th',
                 setLanguage,
