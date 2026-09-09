@@ -28,6 +28,7 @@ import type { Subscription, Language } from '@/features/subscriptions/types/subs
 import { resolveCategory } from '@/features/subscriptions/utils/category-helper';
 import { isSubscriptionPaidForCurrentCycle } from '@/features/subscriptions/utils/billing-calculator';
 import { useApp } from '@/providers/app-store';
+import { formatLocalizedDate } from '@/lib/date/thai-date';
 
 export interface SubscriptionCardProps {
     subscription: Subscription;
@@ -203,7 +204,7 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                     <CreditCard className="w-3.5 h-3.5" />
                     <span>
-                        {t.subscriptions.nextBill}: <strong className="text-foreground">{subscription.nextBillingDate}</strong>
+                        {t.subscriptions.nextBill}: <strong className="text-foreground">{formatLocalizedDate(subscription.nextBillingDate, language, 'medium')}</strong>
                     </span>
                 </div>
 

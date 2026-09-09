@@ -27,6 +27,7 @@ import { CategoryManagerModal } from '@/features/subscriptions/components/catego
 import { useApp } from '@/providers/app-store';
 import { Settings2, Calendar, Sparkles, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { getUsdToThbRate, convertUsdToThb, DEFAULT_USD_THB_RATE } from '@/lib/currency/exchange-rate';
+import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 
 export interface SubscriptionModalProps {
     isOpen: boolean;
@@ -443,26 +444,29 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                                     <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                                     {t.modals.startDate || 'วันที่เริ่มสมัครสมาชิก'}
                                 </Label>
-                                <Input
+                                <ThaiDatePicker
                                     id="startDate"
-                                    type="date"
                                     value={form.startDate || todayStr}
-                                    onChange={(e) => handleStartDateChange(e.target.value)}
+                                    onChange={handleStartDateChange}
+                                    language={language}
+                                    showFullSubtitle={true}
                                 />
                             </div>
 
                             <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                    <Label htmlFor="date" className="text-xs font-medium">
+                                    <Label htmlFor="nextBillingDate" className="text-xs font-medium flex items-center gap-1">
+                                        <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                                         {t.modals.nextBillingDate}
                                     </Label>
                                 </div>
-                                <Input
-                                    id="date"
-                                    type="date"
+                                <ThaiDatePicker
+                                    id="nextBillingDate"
                                     placeholder={language === 'th' ? 'เว้นว่างเพื่อคำนวณอัตโนมัติ' : 'Leave empty to auto-calculate'}
                                     value={form.nextBillingDate || ''}
-                                    onChange={(e) => setForm({ ...form, nextBillingDate: e.target.value })}
+                                    onChange={(val) => setForm({ ...form, nextBillingDate: val })}
+                                    language={language}
+                                    showFullSubtitle={true}
                                 />
                             </div>
                         </div>
