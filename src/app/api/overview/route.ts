@@ -25,11 +25,10 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const email = user.email || '';
         const { data: subs, error } = await supabase
             .from('subscriptions')
             .select('*')
-            .or(`user_id.eq.${user.id},user_email.eq.${email}`)
+            .eq('user_id', user.id)
             .order('next_billing_date', { ascending: true });
 
         if (error) {

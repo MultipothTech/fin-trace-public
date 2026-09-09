@@ -29,12 +29,11 @@ export async function PUT(req: Request, { params }: RouteParams) {
         if (body.color !== undefined) updatePayload.color = body.color;
         if (body.bg !== undefined) updatePayload.bg = body.bg;
 
-        const email = user.email || '';
         const { data, error } = await supabase
             .from('categories')
             .update(updatePayload)
             .eq('id', id)
-            .or(`user_id.eq.${user.id},user_email.eq.${email}`)
+            .eq('user_id', user.id)
             .select()
             .single();
 
@@ -71,12 +70,11 @@ export async function DELETE(req: Request, { params }: RouteParams) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const email = user.email || '';
         const { error } = await supabase
             .from('categories')
             .delete()
             .eq('id', id)
-            .or(`user_id.eq.${user.id},user_email.eq.${email}`);
+            .eq('user_id', user.id);
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });

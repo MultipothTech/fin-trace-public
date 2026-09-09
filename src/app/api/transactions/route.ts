@@ -13,11 +13,10 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const email = user.email || '';
         const { data, error } = await supabase
             .from('transactions')
             .select('*')
-            .or(`user_id.eq.${user.id},user_email.eq.${email}`)
+            .eq('user_id', user.id)
             .order('transaction_date', { ascending: false })
             .order('created_at', { ascending: false });
 
@@ -28,7 +27,6 @@ export async function GET(req: Request) {
         const formatted = (data || []).map((item) => ({
             id: item.id,
             userId: item.user_id,
-            userEmail: item.user_email,
             subscriptionId: item.subscription_id || null,
             amount: Number(item.amount) || 0,
             type: item.type || 'expense',
@@ -73,7 +71,6 @@ export async function POST(req: Request) {
             subscriptionId,
         } = body;
 
-        const email = user.email || '';
         const rawAmount = Number(amount);
         const safeAmount = isNaN(rawAmount) ? 0 : Math.max(0, rawAmount);
         const safeType = type === 'income' ? 'income' : 'expense';
@@ -89,7 +86,6 @@ export async function POST(req: Request) {
             .insert([
                 {
                     user_id: user.id,
-                    user_email: email,
                     subscription_id: subscriptionId || subscription_id || null,
                     amount: safeAmount,
                     type: safeType,
@@ -109,7 +105,6 @@ export async function POST(req: Request) {
         const formatted = {
             id: data.id,
             userId: data.user_id,
-            userEmail: data.user_email,
             subscriptionId: data.subscription_id || null,
             amount: Number(data.amount) || 0,
             type: data.type || 'expense',

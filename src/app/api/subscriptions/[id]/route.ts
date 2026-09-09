@@ -39,12 +39,11 @@ export async function PUT(req: Request, { params }: RouteParams) {
         if (body.status !== undefined) updatePayload.status = body.status;
         if (body.notes !== undefined) updatePayload.notes = body.notes;
 
-        const email = user.email || '';
         let { data, error } = await supabase
             .from('subscriptions')
             .update(updatePayload)
             .eq('id', id)
-            .or(`user_id.eq.${user.id},user_email.eq.${email}`)
+            .eq('user_id', user.id)
             .select()
             .single();
 
@@ -55,7 +54,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
                 .from('subscriptions')
                 .update(updatePayload)
                 .eq('id', id)
-                .or(`user_id.eq.${user.id},user_email.eq.${email}`)
+                .eq('user_id', user.id)
                 .select()
                 .single();
             data = retry.data;
@@ -69,7 +68,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
                 .from('subscriptions')
                 .update(updatePayload)
                 .eq('id', id)
-                .or(`user_id.eq.${user.id},user_email.eq.${email}`)
+                .eq('user_id', user.id)
                 .select()
                 .single();
             data = retry.data;
@@ -83,7 +82,6 @@ export async function PUT(req: Request, { params }: RouteParams) {
         return NextResponse.json({
             id: data.id,
             userId: data.user_id,
-            userEmail: data.user_email,
             name: data.name,
             price: Number(data.price) || 0,
             currency: data.currency,
@@ -118,12 +116,11 @@ export async function DELETE(req: Request, { params }: RouteParams) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const email = user.email || '';
         const { error } = await supabase
             .from('subscriptions')
             .delete()
             .eq('id', id)
-            .or(`user_id.eq.${user.id},user_email.eq.${email}`);
+            .eq('user_id', user.id);
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });

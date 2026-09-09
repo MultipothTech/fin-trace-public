@@ -15,11 +15,10 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const email = user.email || '';
         const { data, error } = await supabase
             .from('subscriptions')
             .select('*')
-            .or(`user_id.eq.${user.id},user_email.eq.${email}`)
+            .eq('user_id', user.id)
             .order('next_billing_date', { ascending: true });
 
         if (error) {
@@ -29,7 +28,6 @@ export async function GET(req: Request) {
         const formatted = (data || []).map((item) => ({
             id: item.id,
             userId: item.user_id,
-            userEmail: item.user_email,
             name: item.name,
             price: Number(item.price) || 0,
             currency: item.currency || 'THB',
@@ -83,7 +81,6 @@ export async function POST(req: Request) {
             notes = '',
         } = body;
 
-        const email = user.email || '';
         const todayStr = new Date().toISOString().split('T')[0];
         const finalStartDate = startDate || todayStr;
         const intervalDays = Math.max(1, Number(customIntervalDays) || 1);
@@ -99,7 +96,6 @@ export async function POST(req: Request) {
 
         const insertPayload: Record<string, unknown> = {
             user_id: user.id,
-            user_email: email,
             name: name || 'Untitled Subscription',
             price: Number(price) || 0,
             currency,
@@ -151,7 +147,6 @@ export async function POST(req: Request) {
         const formatted = {
             id: data.id,
             userId: data.user_id,
-            userEmail: data.user_email,
             name: data.name,
             price: Number(data.price) || 0,
             currency: data.currency,

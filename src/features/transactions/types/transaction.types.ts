@@ -1,7 +1,6 @@
 export interface Transaction {
     id: string;
     userId: string;
-    userEmail: string;
     subscriptionId?: string | null;
     amount: number;
     type: 'income' | 'expense';

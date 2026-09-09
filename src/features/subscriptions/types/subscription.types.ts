@@ -16,7 +16,6 @@ export interface CategoryItem {
 export interface Subscription {
     id: string;
     userId?: string;
-    userEmail?: string;
     name: string;
     price: number;
     currency: string;

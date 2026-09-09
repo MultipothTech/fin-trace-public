@@ -7,7 +7,6 @@
 CREATE TABLE IF NOT EXISTS categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    user_email TEXT NOT NULL,
     key TEXT NOT NULL,
     name_en TEXT NOT NULL,
     name_th TEXT NOT NULL,
@@ -23,7 +22,6 @@ CREATE TABLE IF NOT EXISTS categories (
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    user_email TEXT NOT NULL,
     name TEXT NOT NULL,
     price NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     currency TEXT NOT NULL DEFAULT 'THB',
@@ -48,7 +46,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     notification_enabled BOOLEAN DEFAULT true,
     language TEXT DEFAULT 'th',
-    dashboard_layout JSONB DEFAULT '[{"id":"urgent_banner","visible":true},{"id":"stat_cards","visible":true},{"id":"upcoming_renewals","visible":true},{"id":"category_breakdown","visible":true}]'::jsonb,
+    dashboard_layout JSONB DEFAULT '[{"id":"urgent_banner","visible":true},{"id":"stat_cards","visible":true},{"id":"upcoming_renewals","visible":true},{"id":"category_breakdown","visible":true},{"id":"recent_history","visible":true}]'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
     CONSTRAINT user_settings_user_id_key UNIQUE (user_id)
@@ -58,7 +56,6 @@ CREATE TABLE IF NOT EXISTS user_settings (
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    user_email TEXT NOT NULL,
     subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL,
     amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     type TEXT NOT NULL DEFAULT 'expense' CHECK (type IN ('income', 'expense')),
@@ -72,15 +69,12 @@ CREATE TABLE IF NOT EXISTS transactions (
 
 -- 5. สร้าง Indexes สำหรับเพิ่มความเร็วในการ Query
 CREATE INDEX IF NOT EXISTS idx_categories_user_id ON categories(user_id);
-CREATE INDEX IF NOT EXISTS idx_categories_user_email ON categories(user_email);
 
 CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_user_email ON subscriptions(user_email);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_next_billing_date ON subscriptions(next_billing_date ASC);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
 
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_user_email ON transactions(user_email);
 CREATE INDEX IF NOT EXISTS idx_user_settings_user_id ON user_settings(user_id);
 
 -- 6. Enable Row Level Security (RLS)
@@ -117,7 +111,7 @@ CREATE POLICY "Users can manage their own transactions"
     WITH CHECK (auth.uid() = user_id OR auth.uid() IS NOT NULL);
 
 -- ===================================================================
--- Migration Helper: รันส่วนนี้หากมีตารางเดิมอยู่แล้วและต้องการอัปเดต column & check constraint
+-- Migration Helper: รันส่วนนี้หากมีตารางเดิมอยู่แล้วและต้องการอัปเดต
 -- ===================================================================
 -- 1. อัปเดต CHECK constraint ของ billing_cycle ให้รองรับทุกประเภท ('daily', 'weekly', 'monthly', 'quarterly', 'half_yearly', 'yearly')
 ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_billing_cycle_check;
@@ -129,10 +123,9 @@ ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS custom_interval_days INT DEFA
 ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
 ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS start_date DATE DEFAULT CURRENT_DATE;
 
--- 3. อัปเดต user_settings หากต้องการ
--- ALTER TABLE user_settings DROP COLUMN IF EXISTS user_email;
--- ALTER TABLE user_settings DROP COLUMN IF EXISTS display_name;
--- ALTER TABLE user_settings DROP COLUMN IF EXISTS bank_accounts;
--- ALTER TABLE user_settings DROP COLUMN IF EXISTS reminder_days_before;
--- ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dashboard_layout JSONB DEFAULT '[{"id":"urgent_banner","visible":true},{"id":"stat_cards","visible":true},{"id":"upcoming_renewals","visible":true},{"id":"category_breakdown","visible":true}]'::jsonb;
-
+-- 3. ลบ column user_email ออกจากทุกตารางเนื่องจากใช้อ้างอิง user_id (UUID)
+ALTER TABLE IF EXISTS categories DROP COLUMN IF EXISTS user_email;
+ALTER TABLE IF EXISTS subscriptions DROP COLUMN IF EXISTS user_email;
+ALTER TABLE IF EXISTS transactions DROP COLUMN IF EXISTS user_email;
+ALTER TABLE IF EXISTS user_settings DROP COLUMN IF EXISTS user_email;
+ALTER TABLE IF EXISTS user_settings DROP COLUMN IF EXISTS display_name;

@@ -30,11 +30,10 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const email = user.email || '';
         const { data: userCategories, error } = await supabase
             .from('categories')
             .select('*')
-            .or(`user_id.eq.${user.id},user_email.eq.${email}`)
+            .eq('user_id', user.id)
             .order('created_at', { ascending: true });
 
         if (error) {
@@ -87,7 +86,6 @@ export async function POST(req: Request) {
         const body = await req.json();
         const { nameTh, nameEn, icon = 'MoreHorizontal', color = 'text-purple-400', bg = 'bg-purple-500/10' } = body;
 
-        const email = user.email || '';
         const key = `custom_${Date.now()}`;
 
         const { data, error } = await supabase
@@ -95,7 +93,6 @@ export async function POST(req: Request) {
             .insert([
                 {
                     user_id: user.id,
-                    user_email: email,
                     key,
                     name_en: nameEn || nameTh || 'Custom Category',
                     name_th: nameTh || nameEn || 'หมวดหมู่กำหนดเอง',
