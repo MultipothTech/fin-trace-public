@@ -1,7 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@thesvg/react"],
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "thesvg.org",
+        pathname: "/icons/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;
