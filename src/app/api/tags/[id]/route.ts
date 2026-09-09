@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { clearTagReferences } from '@/lib/ids/clear-entity-refs';
 import { getAuthenticatedUser } from '@/lib/supabase/server';
 
 interface RouteParams {
@@ -71,6 +72,13 @@ export async function DELETE(req: Request, { params }: RouteParams) {
         const { id } = await params;
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        try {
+            await clearTagReferences(supabase, user.id, id);
+        } catch (clearErr: unknown) {
+            const message = clearErr instanceof Error ? clearErr.message : 'Failed to clear tag references';
+            return NextResponse.json({ error: message }, { status: 500 });
         }
 
         const { error } = await supabase

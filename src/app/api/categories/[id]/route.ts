@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { clearCategoryReferences } from '@/lib/ids/clear-entity-refs';
 import { getAuthenticatedUser } from '@/lib/supabase/server';
 
 interface RouteParams {
@@ -130,6 +131,13 @@ export async function DELETE(req: Request, { params }: RouteParams) {
         }
         if (existing.is_system) {
             return NextResponse.json({ error: 'System categories cannot be deleted' }, { status: 403 });
+        }
+
+        try {
+            await clearCategoryReferences(supabase, user.id, id);
+        } catch (clearErr: unknown) {
+            const message = clearErr instanceof Error ? clearErr.message : 'Failed to clear category references';
+            return NextResponse.json({ error: message }, { status: 500 });
         }
 
         const { error } = await supabase

@@ -265,5 +265,60 @@ ALTER TABLE transactions
     ADD CONSTRAINT transactions_category_id_fkey
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL;
 
+-- Strip deleted tag / project ids from UUID[] columns
+CREATE OR REPLACE FUNCTION public.strip_deleted_tag_id()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    UPDATE subscriptions
+    SET tag_ids = array_remove(COALESCE(tag_ids, '{}'), OLD.id)
+    WHERE user_id = OLD.user_id
+      AND OLD.id = ANY(COALESCE(tag_ids, '{}'));
+
+    UPDATE transactions
+    SET tag_ids = array_remove(COALESCE(tag_ids, '{}'), OLD.id)
+    WHERE user_id = OLD.user_id
+      AND OLD.id = ANY(COALESCE(tag_ids, '{}'));
+
+    RETURN OLD;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.strip_deleted_project_id()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    UPDATE subscriptions
+    SET project_ids = array_remove(COALESCE(project_ids, '{}'), OLD.id)
+    WHERE user_id = OLD.user_id
+      AND OLD.id = ANY(COALESCE(project_ids, '{}'));
+
+    UPDATE transactions
+    SET project_ids = array_remove(COALESCE(project_ids, '{}'), OLD.id)
+    WHERE user_id = OLD.user_id
+      AND OLD.id = ANY(COALESCE(project_ids, '{}'));
+
+    RETURN OLD;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_strip_deleted_tag_id ON tags;
+CREATE TRIGGER trg_strip_deleted_tag_id
+    BEFORE DELETE ON tags
+    FOR EACH ROW
+    EXECUTE FUNCTION public.strip_deleted_tag_id();
+
+DROP TRIGGER IF EXISTS trg_strip_deleted_project_id ON projects;
+CREATE TRIGGER trg_strip_deleted_project_id
+    BEFORE DELETE ON projects
+    FOR EACH ROW
+    EXECUTE FUNCTION public.strip_deleted_project_id();
+
 ALTER TABLE subscriptions DROP COLUMN IF EXISTS icon;
 ALTER TABLE subscriptions DROP COLUMN IF EXISTS color;

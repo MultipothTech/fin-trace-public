@@ -310,6 +310,18 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         try {
             await apiDeleteCat(id);
             setCategories((prev) => prev.filter((c) => c.id !== id));
+            setSubscriptions((prev) =>
+                prev.map((s) =>
+                    s.categoryId === id
+                        ? { ...s, categoryId: null, category: 'other' }
+                        : s
+                )
+            );
+            setTransactions((prev) =>
+                prev.map((tx) =>
+                    tx.categoryId === id ? { ...tx, categoryId: null, category: 'other' } : tx
+                )
+            );
         } catch (err) {
             console.error('Failed to delete category:', err);
             throw err;
