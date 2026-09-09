@@ -40,7 +40,7 @@ function AppContent() {
     }
 
     return (
-        <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20 selection:text-foreground overflow-hidden">
+        <div className="h-[100dvh] max-h-[100dvh] bg-background text-foreground font-sans selection:bg-primary/20 selection:text-foreground overflow-hidden">
             <div
                 className="fixed inset-0 z-0 pointer-events-none opacity-[0.03] dark:opacity-[0.05] text-foreground"
                 style={{

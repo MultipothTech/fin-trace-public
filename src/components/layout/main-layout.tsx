@@ -39,7 +39,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, user, view = '
     const urgentCount = urgentSubscriptions.length;
 
     return (
-        <div className="flex flex-col h-screen max-w-md mx-auto relative z-10 md:max-w-6xl md:flex-row shadow-2xl md:border-x md:border-border bg-background">
+        <div className="flex flex-col h-[100dvh] max-h-[100dvh] max-w-md mx-auto relative z-10 md:max-w-6xl md:flex-row shadow-2xl md:border-x md:border-border bg-background overflow-hidden">
             {/* Desktop Sidebar */}
             <aside className="hidden md:flex flex-col w-64 border-r border-border p-6 space-y-8">
                 <div className="flex items-center gap-3">
@@ -156,7 +156,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, user, view = '
             </main>
 
             {/* Mobile Bottom Navigation Bar (5 tabs) */}
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border grid grid-cols-5 px-1.5 pt-2 pb-6 sm:pb-3 shadow-[0_-4px_24px_rgba(0,0,0,0.1)] [padding-bottom:max(1.5rem,env(safe-area-inset-bottom,1.5rem))]">
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 max-w-md mx-auto z-40 bg-background/98 backdrop-blur-xl border-t border-border grid grid-cols-5 px-1.5 pt-2 pb-6 sm:pb-3 shadow-[0_-4px_24px_rgba(0,0,0,0.12)] [padding-bottom:max(1.5rem,env(safe-area-inset-bottom,1.5rem))]">
                 <MobileNavButton
                     active={view === 'overview'}
                     onClick={() => setView('overview')}
