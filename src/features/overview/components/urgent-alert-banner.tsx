@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TRANSLATIONS } from '@/config/constants';
 import { calculateDaysRemaining } from '@/features/notifications/services/notification-service';
+import { formatLocalizedDate } from '@/lib/date/thai-date';
 import type { Subscription, Language } from '@/features/subscriptions/types/subscription.types';
 
 export interface UrgentAlertBannerProps {
@@ -85,7 +86,7 @@ export const UrgentAlertBanner: React.FC<UrgentAlertBannerProps> = ({
                         >
                             <div className="truncate pr-2">
                                 <p className="font-semibold text-foreground truncate">{sub.name}</p>
-                                <p className="text-muted-foreground text-[10px]">{sub.nextBillingDate}</p>
+                                <p className="text-muted-foreground text-[10px]">{formatLocalizedDate(sub.nextBillingDate, language, 'medium')}</p>
                             </div>
                             <div className="text-right shrink-0">
                                 <p className="font-bold text-foreground">฿{sub.price.toLocaleString()}</p>

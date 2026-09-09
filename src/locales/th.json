@@ -110,6 +110,7 @@
     "tablePaidDate": "วันที่บันทึกชำระ",
     "tableMethod": "ช่องทางชำระ",
     "tableCategory": "หมวดหมู่",
+    "tableCurrency": "สกุลเงิน",
     "tableAmount": "ยอดเงิน",
     "tableActions": "จัดการ",
     "emptyTitle": "ยังไม่มีประวัติการชำระเงิน",

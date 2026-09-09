@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useApp } from '@/providers/app-store';
 import { TRANSLATIONS } from '@/config/constants';
+import { formatLocalizedDate, formatLocalizedMonth, localizeDatesInText } from '@/lib/date/thai-date';
 import type { Transaction } from '@/features/transactions/types/transaction.types';
 
 export interface HistoryContentProps {
@@ -163,7 +164,8 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
             'Service/Description',
             'Billing Cycle Snapshot',
             'Payment Date',
-            'Amount (THB)',
+            'Amount',
+            'Currency',
             'Category',
             'Payment Method',
         ];
@@ -177,6 +179,7 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                 `"${cycleDate}"`,
                 `"${tx.transactionDate || ''}"`,
                 tx.amount,
+                `"${(sub?.currency || 'THB').toUpperCase()}"`,
                 `"${(tx.category || sub?.category || '').replace(/"/g, '""')}"`,
                 `"${(tx.paymentChannel || sub?.paymentMethod || '').replace(/"/g, '""')}"`,
             ];
@@ -360,7 +363,7 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                                 <option value="all">{t.history?.allMonths || (isTh ? 'ทุกช่วงเวลา' : 'All Months')}</option>
                                 {availableMonths.map((m) => (
                                     <option key={m} value={m}>
-                                        {m}
+                                        {formatLocalizedMonth(m, language)}
                                     </option>
                                 ))}
                             </select>
@@ -406,6 +409,7 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                                     <th className="py-3 px-4">{t.history?.tablePaidDate || (isTh ? 'วันที่บันทึกชำระ' : 'Recorded Date')}</th>
                                     <th className="py-3 px-4">{t.history?.tableMethod || (isTh ? 'ช่องทาง' : 'Channel')}</th>
                                     <th className="py-3 px-4">{t.history?.tableCategory || (isTh ? 'หมวดหมู่' : 'Category')}</th>
+                                    <th className="py-3 px-4 text-center">{t.history?.tableCurrency || (isTh ? 'สกุลเงิน' : 'Currency')}</th>
                                     <th className="py-3 px-4 text-right">{t.history?.tableAmount || (isTh ? 'ยอดเงิน' : 'Amount')}</th>
                                     <th className="py-3 px-4 text-center">{t.history?.tableActions || (isTh ? 'จัดการ' : 'Action')}</th>
                                 </tr>
@@ -413,15 +417,26 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                             <tbody className="divide-y divide-border/40">
                                 {filteredTxs.map((tx) => {
                                     const sub = subscriptions.find((s) => s.id === tx.subscriptionId);
-                                    const name = tx.description || sub?.name || (isTh ? 'ชำระค่าบริการ' : 'Subscription Payment');
+                                    const rawName = tx.description || sub?.name || (isTh ? 'ชำระค่าบริการ' : 'Subscription Payment');
+                                    const name = localizeDatesInText(rawName, language);
                                     const category = tx.category || sub?.category;
                                     const channel = tx.paymentChannel || sub?.paymentMethod;
+                                    const currency = (sub?.currency || 'THB').toUpperCase();
+                                    const isExpense = tx.type !== 'income';
+                                    const amountColor = isExpense
+                                        ? 'text-rose-600 dark:text-rose-400'
+                                        : 'text-emerald-600 dark:text-emerald-400';
+                                    const amountPrefix = isExpense ? '-' : '+';
 
                                     return (
                                         <tr key={tx.id} className="hover:bg-muted/30 transition-colors">
                                             <td className="py-3.5 px-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                                                    <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${
+                                                        isExpense
+                                                            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                                                            : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                                    }`}>
                                                         <ArrowDownLeft className="w-4 h-4" />
                                                     </div>
                                                     <div>
@@ -433,10 +448,10 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                                                 </div>
                                             </td>
 
-                                            <td className="py-3.5 px-4 font-mono text-[11px] text-muted-foreground">
+                                            <td className="py-3.5 px-4 text-[11px] text-muted-foreground">
                                                 {getCycleDate(tx) ? (
                                                     <span className="bg-muted px-2 py-0.5 rounded border border-border/40">
-                                                        {getCycleDate(tx)}
+                                                        {formatLocalizedDate(getCycleDate(tx), language, 'medium')}
                                                     </span>
                                                 ) : (
                                                     '-'
@@ -446,7 +461,7 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                                             <td className="py-3.5 px-4 text-muted-foreground">
                                                 <div className="flex items-center gap-1.5">
                                                     <Calendar className="w-3.5 h-3.5 text-muted-foreground/70" />
-                                                    <span>{tx.transactionDate || '-'}</span>
+                                                    <span>{tx.transactionDate ? formatLocalizedDate(tx.transactionDate, language, 'medium') : '-'}</span>
                                                 </div>
                                             </td>
 
@@ -471,9 +486,15 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                                                 )}
                                             </td>
 
+                                            <td className="py-3.5 px-4 text-center">
+                                                <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5">
+                                                    {currency}
+                                                </Badge>
+                                            </td>
+
                                             <td className="py-3.5 px-4 text-right">
-                                                <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                                                    -฿{Number(tx.amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                                <span className={`font-bold text-sm ${amountColor}`}>
+                                                    {amountPrefix}฿{Number(tx.amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                                                 </span>
                                             </td>
 
@@ -498,9 +519,16 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                     <div className="md:hidden space-y-2.5">
                         {filteredTxs.map((tx) => {
                             const sub = subscriptions.find((s) => s.id === tx.subscriptionId);
-                            const name = tx.description || sub?.name || (isTh ? 'ชำระค่าบริการ' : 'Subscription Payment');
+                            const rawName = tx.description || sub?.name || (isTh ? 'ชำระค่าบริการ' : 'Subscription Payment');
+                            const name = localizeDatesInText(rawName, language);
                             const category = tx.category || sub?.category;
                             const channel = tx.paymentChannel || sub?.paymentMethod;
+                            const currency = (sub?.currency || 'THB').toUpperCase();
+                            const isExpense = tx.type !== 'income';
+                            const amountColor = isExpense
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : 'text-emerald-600 dark:text-emerald-400';
+                            const amountPrefix = isExpense ? '-' : '+';
 
                             return (
                                 <div
@@ -509,22 +537,27 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                                 >
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="flex items-center gap-2.5 min-w-0">
-                                            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                                            <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${
+                                                isExpense
+                                                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                                                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                            }`}>
                                                 <ArrowDownLeft className="w-4 h-4" />
                                             </div>
                                             <div className="min-w-0">
                                                 <div className="font-semibold text-xs text-foreground truncate">{name}</div>
                                                 <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
                                                     <Calendar className="w-3 h-3" />
-                                                    <span>{tx.transactionDate}</span>
+                                                    <span>{tx.transactionDate ? formatLocalizedDate(tx.transactionDate, language, 'medium') : '-'}</span>
                                                 </div>
                                             </div>
                                         </div>
 
                                         <div className="text-right shrink-0">
-                                            <div className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                                                -฿{Number(tx.amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                            <div className={`font-bold text-sm ${amountColor}`}>
+                                                {amountPrefix}฿{Number(tx.amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                                             </div>
+                                            <div className="text-[10px] text-muted-foreground font-medium mt-0.5">{currency}</div>
                                         </div>
                                     </div>
 
@@ -532,7 +565,7 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                                         <div className="flex items-center gap-2 flex-wrap">
                                             {getCycleDate(tx) && (
                                                 <span className="font-mono bg-muted px-1.5 py-0.5 rounded border border-border/40">
-                                                    {isTh ? 'รอบ: ' : 'Cycle: '}{getCycleDate(tx)}
+                                                    {isTh ? 'รอบ: ' : 'Cycle: '}{formatLocalizedDate(getCycleDate(tx), language, 'medium')}
                                                 </span>
                                             )}
                                             {channel && (
@@ -615,10 +648,10 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({ setView, initial
                             {t.history?.deleteTitle || (isTh ? 'ยืนยันการลบประวัติการชำระเงิน' : 'Delete Payment Record')}
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            {t.history?.deleteDesc?.replace('{name}', deleteTarget?.description || '') ||
+                            {t.history?.deleteDesc?.replace('{name}', localizeDatesInText(deleteTarget?.description, language) || '') ||
                                 (isTh
-                                    ? `คุณแน่ใจหรือไม่ว่าต้องการลบบันทึกประวัติ "${deleteTarget?.description || ''}"? การลบนี้เป็นเพียงการลบ snapshot และจะไม่เปลี่ยนวันตัดรอบบิลปัจจุบันของแพ็กเกจ`
-                                    : `Are you sure you want to delete this payment record "${deleteTarget?.description || ''}"?`)}
+                                    ? `คุณแน่ใจหรือไม่ว่าต้องการลบบันทึกประวัติ "${localizeDatesInText(deleteTarget?.description, language) || ''}"? การลบนี้เป็นเพียงการลบ snapshot และจะไม่เปลี่ยนวันตัดรอบบิลปัจจุบันของแพ็กเกจ`
+                                    : `Are you sure you want to delete this payment record "${localizeDatesInText(deleteTarget?.description, language) || ''}"?`)}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

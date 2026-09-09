@@ -110,6 +110,7 @@
     "tablePaidDate": "Recorded Date",
     "tableMethod": "Channel / Method",
     "tableCategory": "Category",
+    "tableCurrency": "Currency",
     "tableAmount": "Amount",
     "tableActions": "Actions",
     "emptyTitle": "No Payment History Records",

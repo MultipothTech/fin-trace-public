@@ -26,6 +26,7 @@ import { useApp } from '@/providers/app-store';
 import { TRANSLATIONS } from '@/config/constants';
 import { calculateDaysRemaining } from '@/features/notifications/services/notification-service';
 import { resolveCategory } from '@/features/subscriptions/utils/category-helper';
+import { formatLocalizedDate, localizeDatesInText } from '@/lib/date/thai-date';
 import type { SubscriptionInput } from '@/features/subscriptions/types/subscription.types';
 import type { DashboardLayoutItem } from '@/features/settings/types/settings.types';
 
@@ -320,7 +321,7 @@ export const OverviewContent: React.FC<OverviewContentProps> = ({ setView = () =
                                                             {sub.name}
                                                         </p>
                                                         <p className="text-xs text-muted-foreground">
-                                                            {sub.nextBillingDate}
+                                                            {formatLocalizedDate(sub.nextBillingDate, language, 'medium')}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -451,10 +452,13 @@ export const OverviewContent: React.FC<OverviewContentProps> = ({ setView = () =
                                                     </div>
                                                     <div className="min-w-0">
                                                         <p className="font-semibold text-sm text-foreground truncate">
-                                                            {tx.description || tx.category || (language === 'th' ? 'ชำระค่าบริการ' : 'Subscription Payment')}
+                                                            {localizeDatesInText(
+                                                                tx.description || tx.category || (language === 'th' ? 'ชำระค่าบริการ' : 'Subscription Payment'),
+                                                                language
+                                                            )}
                                                         </p>
                                                         <p className="text-xs text-muted-foreground flex items-center gap-1.5 truncate">
-                                                            <span>{tx.transactionDate}</span>
+                                                            <span>{formatLocalizedDate(tx.transactionDate, language, 'medium')}</span>
                                                             {tx.paymentChannel && (
                                                                 <>
                                                                     <span>•</span>
@@ -466,8 +470,15 @@ export const OverviewContent: React.FC<OverviewContentProps> = ({ setView = () =
                                                 </div>
 
                                                 <div className="text-right shrink-0">
-                                                    <p className="font-bold text-sm text-foreground">
-                                                        ฿{Number(tx.amount || 0).toLocaleString()}
+                                                    <p className={`font-bold text-sm ${
+                                                        tx.type !== 'income'
+                                                            ? 'text-rose-600 dark:text-rose-400'
+                                                            : 'text-emerald-600 dark:text-emerald-400'
+                                                    }`}>
+                                                        {tx.type !== 'income' ? '-' : '+'}฿{Number(tx.amount || 0).toLocaleString()}
+                                                        <span className="ml-1 text-[10px] font-medium text-muted-foreground">
+                                                            {(subscriptions.find((s) => s.id === tx.subscriptionId)?.currency || 'THB').toUpperCase()}
+                                                        </span>
                                                     </p>
                                                     <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
                                                         {language === 'th' ? 'ชำระแล้ว' : 'Paid'}

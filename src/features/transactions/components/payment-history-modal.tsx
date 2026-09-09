@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useApp } from '@/providers/app-store';
 import { TRANSLATIONS } from '@/config/constants';
+import { formatLocalizedDate, localizeDatesInText } from '@/lib/date/thai-date';
 import type { Transaction } from '@/features/transactions/types/transaction.types';
 import type { Language } from '@/features/subscriptions/types/subscription.types';
 import {
@@ -157,28 +158,41 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                         {filteredTxs.length > 0 ? (
                             filteredTxs.map((tx) => {
                                 const sub = subscriptions.find((s) => s.id === tx.subscriptionId);
+                                const rawName = tx.description || sub?.name || (isTh ? 'ชำระค่าบริการ' : 'Subscription Payment');
+                                const name = localizeDatesInText(rawName, language);
+                                const currency = (sub?.currency || 'THB').toUpperCase();
+                                const isExpense = tx.type !== 'income';
+                                const amountColor = isExpense
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : 'text-emerald-600 dark:text-emerald-400';
+                                const amountPrefix = isExpense ? '-' : '+';
+
                                 return (
                                     <div
                                         key={tx.id}
                                         className="flex items-center justify-between p-3.5 rounded-xl border border-border/60 bg-card hover:bg-muted/30 transition-all gap-3"
                                     >
                                         <div className="flex items-center gap-3 min-w-0">
-                                            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                                            <div className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${
+                                                isExpense
+                                                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                                                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                            }`}>
                                                 <ArrowDownLeft className="w-4 h-4" />
                                             </div>
                                             <div className="min-w-0">
                                                 <div className="font-semibold text-sm text-foreground truncate">
-                                                    {tx.description || sub?.name || (isTh ? 'ชำระค่าบริการ' : 'Subscription Payment')}
+                                                    {name}
                                                 </div>
                                                 <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-muted-foreground">
                                                     {getCycleDate(tx) && (
-                                                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded border border-border/40 text-[10px]">
-                                                            {isTh ? 'รอบ: ' : 'Cycle: '}{getCycleDate(tx)}
+                                                        <span className="bg-muted px-1.5 py-0.5 rounded border border-border/40 text-[10px]">
+                                                            {isTh ? 'รอบ: ' : 'Cycle: '}{formatLocalizedDate(getCycleDate(tx), language, 'medium')}
                                                         </span>
                                                     )}
                                                     <span className="flex items-center gap-1">
                                                         <Calendar className="w-3 h-3" />
-                                                        {tx.transactionDate}
+                                                        {tx.transactionDate ? formatLocalizedDate(tx.transactionDate, language, 'medium') : '-'}
                                                     </span>
                                                     {tx.paymentChannel && (
                                                         <span className="flex items-center gap-1">
@@ -186,6 +200,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                                                             {tx.paymentChannel}
                                                         </span>
                                                     )}
+                                                    <Badge variant="outline" className="text-[9px] py-0 px-1.5 h-4 font-semibold">
+                                                        {currency}
+                                                    </Badge>
                                                     {tx.category && (
                                                         <Badge variant="secondary" className="text-[9px] py-0 px-1.5 h-4">
                                                             {tx.category}
@@ -196,8 +213,8 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                                         </div>
 
                                         <div className="flex items-center gap-3 shrink-0">
-                                            <span className="font-bold text-sm text-foreground">
-                                                -฿{Number(tx.amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                            <span className={`font-bold text-sm ${amountColor}`}>
+                                                {amountPrefix}฿{Number(tx.amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                                             </span>
                                             <Button
                                                 variant="ghost"

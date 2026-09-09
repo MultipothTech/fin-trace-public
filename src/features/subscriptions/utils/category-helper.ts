@@ -1,4 +1,6 @@
-import React from 'react';
+'use client';
+
+import React, { createElement } from 'react';
 import {
     icons,
     MoreHorizontal,
@@ -6,6 +8,8 @@ import {
 } from 'lucide-react';
 import { SUBSCRIPTION_CATEGORIES } from '@/config/constants';
 import type { CategoryItem, Language } from '@/features/subscriptions/types/subscription.types';
+import { getTheSvgSlug } from '@/lib/icons/thesvg-utils';
+import { TheSvgIcon } from '@/components/icons/thesvg-icon';
 
 export const ICON_MAP: Record<string, React.ElementType> = icons as unknown as Record<string, React.ElementType>;
 
@@ -15,6 +19,28 @@ export interface ResolvedCategory {
     Icon: React.ElementType;
     color: string;
     bg: string;
+    iconName?: string;
+}
+
+const theSvgComponentCache = new Map<string, React.ElementType>();
+
+function getTheSvgComponent(slug: string): React.ElementType {
+    let Comp = theSvgComponentCache.get(slug);
+    if (!Comp) {
+        const Cached: React.FC<{ className?: string }> = ({ className }) =>
+            createElement(TheSvgIcon, { slug, className });
+        Cached.displayName = `TheSvg(${slug})`;
+        Comp = Cached;
+        theSvgComponentCache.set(slug, Comp);
+    }
+    return Comp;
+}
+
+function resolveIconComponent(iconName?: string): React.ElementType {
+    const slug = getTheSvgSlug(iconName);
+    if (slug) return getTheSvgComponent(slug);
+    if (iconName && ICON_MAP[iconName]) return ICON_MAP[iconName];
+    return Tag;
 }
 
 /**
@@ -28,20 +54,18 @@ export function resolveCategory(
 ): ResolvedCategory {
     const key = categoryKey || 'other';
 
-    // 1. ตรวจสอบใน Custom Categories ก่อน
     const custom = customCategories.find((c) => c.key === key);
     if (custom) {
-        const IconComponent = (custom.icon && ICON_MAP[custom.icon]) || Tag;
         return {
             key: custom.key,
             label: language === 'th' ? (custom.label_th || custom.label_en) : (custom.label_en || custom.label_th),
-            Icon: IconComponent,
+            Icon: resolveIconComponent(custom.icon),
             color: custom.color || 'text-indigo-400',
             bg: custom.bg || 'bg-indigo-500/10',
+            iconName: custom.icon,
         };
     }
 
-    // 2. Fallback ไปที่ default mapping ใน SUBSCRIPTION_CATEGORIES
     const defaultPreset = SUBSCRIPTION_CATEGORIES[key] || SUBSCRIPTION_CATEGORIES.other;
     return {
         key,

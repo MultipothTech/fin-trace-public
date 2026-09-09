@@ -22,9 +22,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { useApp } from '@/providers/app-store';
 import { TRANSLATIONS } from '@/config/constants';
 import type { CategoryItem, CategoryInput, Language } from '@/features/subscriptions/types/subscription.types';
+import { CategoryIcon } from '@/components/icons/category-icon';
+import {
+    getTheSvgSlug,
+    isTheSvgIcon,
+    searchTheSvgSlugs,
+    toTheSvgIconValue,
+} from '@/lib/icons/thesvg-utils';
+import { THESVG_SLUGS } from '@/lib/icons/thesvg-slugs';
 import {
     icons,
     Plus,
@@ -32,16 +41,11 @@ import {
     Trash2,
     Check,
     FolderKanban,
-    Tag,
     Search,
 } from 'lucide-react';
 
-// Build full icon map from lucide-react
 const ICON_MAP: Record<string, React.ElementType> = icons as unknown as Record<string, React.ElementType>;
-
-// Pre-compute sorted icon name list (exclude internal/utility icons)
 const ALL_ICON_NAMES = Object.keys(icons).sort();
-
 const ICONS_PER_PAGE = 30;
 
 const COLOR_PALETTES = [
@@ -56,6 +60,8 @@ const COLOR_PALETTES = [
     { name: 'Pink', color: 'text-pink-400', bg: 'bg-pink-500/10 border-pink-500/20' },
 ];
 
+type IconSource = 'lucide' | 'thesvg';
+
 interface CategoryManagerModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -69,6 +75,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 }) => {
     const { categories, addCategory, updateCategory, deleteCategory } = useApp();
     const t = TRANSLATIONS[language] || TRANSLATIONS.th;
+    const isTh = language === 'th';
 
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState<string | null>(null);
@@ -85,32 +92,33 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     const [deleteCatTarget, setDeleteCatTarget] = useState<CategoryItem | null>(null);
     const [isDeletingCat, setIsDeletingCat] = useState(false);
 
-    // Icon picker state
+    const [iconSource, setIconSource] = useState<IconSource>('lucide');
     const [iconSearch, setIconSearch] = useState('');
     const [visibleCount, setVisibleCount] = useState(ICONS_PER_PAGE);
     const iconScrollRef = useRef<HTMLDivElement>(null);
     const sentinelRef = useRef<HTMLDivElement>(null);
 
-    // Filtered icon list based on search
-    const filteredIcons = useMemo(() => {
+    const lucideFiltered = useMemo(() => {
         if (!iconSearch.trim()) return ALL_ICON_NAMES;
         const q = iconSearch.trim().toLowerCase();
         return ALL_ICON_NAMES.filter((name) => name.toLowerCase().includes(q));
     }, [iconSearch]);
 
-    // Visible slice
+    const thesvgFiltered = useMemo(() => searchTheSvgSlugs(iconSearch, 120), [iconSearch]);
+
+    const filteredIcons = iconSource === 'lucide' ? lucideFiltered : thesvgFiltered;
+    const totalIconCount = iconSource === 'lucide' ? ALL_ICON_NAMES.length : THESVG_SLUGS.length;
+
     const visibleIcons = useMemo(
         () => filteredIcons.slice(0, visibleCount),
         [filteredIcons, visibleCount]
     );
     const hasMore = visibleCount < filteredIcons.length;
 
-    // Reset visible count when search changes
     useEffect(() => {
         setVisibleCount(ICONS_PER_PAGE);
-    }, [iconSearch]);
+    }, [iconSearch, iconSource]);
 
-    // IntersectionObserver for infinite scroll
     const observerCallback = useCallback(
         (entries: IntersectionObserverEntry[]) => {
             if (entries[0]?.isIntersecting && hasMore) {
@@ -129,7 +137,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
         });
         observer.observe(sentinel);
         return () => observer.disconnect();
-    }, [observerCallback, isEditing]);
+    }, [observerCallback, isEditing, iconSource]);
 
     const resetForm = () => {
         setIsEditing(false);
@@ -144,6 +152,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
         });
         setErrorMsg('');
         setIconSearch('');
+        setIconSource('lucide');
         setVisibleCount(ICONS_PER_PAGE);
     };
 
@@ -156,14 +165,16 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
         if (cat.isSystem) return;
         setIsEditing(true);
         setEditId(cat.id || null);
+        const icon = cat.icon || 'Tag';
         setForm({
             key: cat.key,
             nameTh: cat.label_th,
             nameEn: cat.label_en,
-            icon: cat.icon || 'Tag',
+            icon,
             color: cat.color || 'text-indigo-400',
             bg: cat.bg || 'bg-indigo-500/10 border-indigo-500/20',
         });
+        setIconSource(isTheSvgIcon(icon) ? 'thesvg' : 'lucide');
         setErrorMsg('');
     };
 
@@ -181,16 +192,39 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
             setDeleteCatTarget(null);
         } catch (err) {
             console.error(err);
-            setErrorMsg(language === 'th' ? 'เกิดข้อผิดพลาดในการลบ' : 'Failed to delete category');
+            setErrorMsg(isTh ? 'เกิดข้อผิดพลาดในการลบ' : 'Failed to delete category');
         } finally {
             setIsDeletingCat(false);
         }
     };
 
+    const handleIconSourceChange = (useTheSvg: boolean) => {
+        setIconSource(useTheSvg ? 'thesvg' : 'lucide');
+        setIconSearch('');
+        setVisibleCount(ICONS_PER_PAGE);
+        if (useTheSvg && !isTheSvgIcon(form.icon)) {
+            setForm((prev) => ({ ...prev, icon: toTheSvgIconValue('netflix') }));
+        } else if (!useTheSvg && isTheSvgIcon(form.icon)) {
+            setForm((prev) => ({ ...prev, icon: 'Tag' }));
+        }
+    };
+
+    const handleSelectIcon = (name: string) => {
+        setForm({
+            ...form,
+            icon: iconSource === 'thesvg' ? toTheSvgIconValue(name) : name,
+        });
+    };
+
+    const isIconSelected = (name: string) => {
+        if (iconSource === 'thesvg') return getTheSvgSlug(form.icon) === name;
+        return form.icon === name;
+    };
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!form.nameTh.trim() && !form.nameEn.trim()) {
-            setErrorMsg(language === 'th' ? 'กรุณากรอกชื่อหมวดหมู่' : 'Please provide category name');
+            setErrorMsg(isTh ? 'กรุณากรอกชื่อหมวดหมู่' : 'Please provide category name');
             return;
         }
 
@@ -222,10 +256,9 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
         }
     };
 
-    const renderIcon = useCallback((iconName?: string, className = 'w-4 h-4') => {
-        const IconComponent = (iconName && ICON_MAP[iconName]) || Tag;
-        return <IconComponent className={className} />;
-    }, []);
+    const selectedLabel = isTheSvgIcon(form.icon)
+        ? getTheSvgSlug(form.icon) || form.icon
+        : form.icon;
 
     return (
         <>
@@ -234,7 +267,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <FolderKanban className="w-5 h-5 text-indigo-400" />
-                        {language === 'th' ? 'จัดการหมวดหมู่บริการ' : 'Manage Subscription Categories'}
+                        {isTh ? 'จัดการหมวดหมู่บริการ' : 'Manage Subscription Categories'}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -248,11 +281,11 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <Label className="text-xs text-muted-foreground">
-                                {language === 'th' ? 'หมวดหมู่ทั้งหมด' : 'All Categories'} ({categories.length})
+                                {isTh ? 'หมวดหมู่ทั้งหมด' : 'All Categories'} ({categories.length})
                             </Label>
                             <Button size="sm" onClick={handleStartCreate} className="h-8 gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700">
                                 <Plus className="w-3.5 h-3.5" />
-                                {language === 'th' ? 'เพิ่มหมวดหมู่' : 'New Category'}
+                                {isTh ? 'เพิ่มหมวดหมู่' : 'New Category'}
                             </Button>
                         </div>
 
@@ -266,14 +299,14 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${cat.bg || 'bg-muted'} ${cat.color || 'text-foreground'}`}>
-                                                {renderIcon(cat.icon)}
+                                                <CategoryIcon icon={cat.icon} className="w-4 h-4" />
                                             </div>
                                             <div>
                                                 <div className="text-sm font-medium">
-                                                    {language === 'th' ? cat.label_th : cat.label_en}
+                                                    {isTh ? cat.label_th : cat.label_en}
                                                 </div>
                                                 <div className="text-[11px] text-muted-foreground">
-                                                    {language === 'th' ? cat.label_en : cat.label_th}
+                                                    {isTh ? cat.label_en : cat.label_th}
                                                 </div>
                                             </div>
                                         </div>
@@ -281,7 +314,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                                         <div className="flex items-center gap-1.5">
                                             {isSys ? (
                                                 <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50">
-                                                    {language === 'th' ? 'ค่าเริ่มต้น' : 'System'}
+                                                    {isTh ? 'ค่าเริ่มต้น' : 'System'}
                                                 </Badge>
                                             ) : (
                                                 <>
@@ -313,23 +346,16 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                     <form onSubmit={handleSave} className="space-y-4">
                         <div className="flex items-center justify-between border-b border-border/40 pb-2">
                             <span className="text-xs font-semibold text-foreground">
-                                {editId ? (language === 'th' ? 'แก้ไขหมวดหมู่' : 'Edit Category') : (language === 'th' ? 'สร้างหมวดหมู่ใหม่' : 'Create Category')}
+                                {editId ? (isTh ? 'แก้ไขหมวดหมู่' : 'Edit Category') : (isTh ? 'สร้างหมวดหมู่ใหม่' : 'Create Category')}
                             </span>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs h-7"
-                                onClick={resetForm}
-                            >
+                            <Button type="button" variant="ghost" size="sm" className="text-xs h-7" onClick={resetForm}>
                                 {t.modals.cancel}
                             </Button>
                         </div>
 
-                        {/* Thai Name */}
                         <div className="space-y-1.5">
                             <Label htmlFor="catNameTh" className="text-xs font-medium">
-                                {language === 'th' ? 'ชื่อหมวดหมู่ (ภาษาไทย)' : 'Category Name (TH)'} *
+                                {isTh ? 'ชื่อหมวดหมู่ (ภาษาไทย)' : 'Category Name (TH)'} *
                             </Label>
                             <Input
                                 id="catNameTh"
@@ -340,10 +366,9 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                             />
                         </div>
 
-                        {/* English Name */}
                         <div className="space-y-1.5">
                             <Label htmlFor="catNameEn" className="text-xs font-medium">
-                                {language === 'th' ? 'ชื่อหมวดหมู่ (English)' : 'Category Name (EN)'}
+                                {isTh ? 'ชื่อหมวดหมู่ (English)' : 'Category Name (EN)'}
                             </Label>
                             <Input
                                 id="catNameEn"
@@ -353,75 +378,103 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                             />
                         </div>
 
-                        {/* Icon Picker */}
                         <div className="space-y-1.5">
-                            <Label className="text-xs font-medium">
-                                {language === 'th' ? 'เลือกไอคอน' : 'Select Icon'}
-                                <span className="ml-1.5 text-muted-foreground font-normal">({filteredIcons.length})</span>
-                            </Label>
-                            {/* Search */}
+                            <div className="flex items-center justify-between gap-3">
+                                <Label className="text-xs font-medium">
+                                    {isTh ? 'เลือกไอคอน' : 'Select Icon'}
+                                    <span className="ml-1.5 text-muted-foreground font-normal">
+                                        ({iconSource === 'thesvg' && !iconSearch.trim()
+                                            ? `${isTh ? 'ยอดนิยม' : 'Popular'} · ${totalIconCount}`
+                                            : filteredIcons.length})
+                                    </span>
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-[11px] ${iconSource === 'lucide' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                                        Lucide
+                                    </span>
+                                    <Switch
+                                        checked={iconSource === 'thesvg'}
+                                        onCheckedChange={handleIconSourceChange}
+                                        aria-label={isTh ? 'สลับไปใช้ theSVG' : 'Switch to theSVG'}
+                                    />
+                                    <span className={`text-[11px] ${iconSource === 'thesvg' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                                        theSVG
+                                    </span>
+                                </div>
+                            </div>
+
                             <div className="relative">
                                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                                 <Input
-                                    placeholder={language === 'th' ? 'ค้นหาไอคอน เช่น Heart, Star, Music...' : 'Search icons e.g. Heart, Star, Music...'}
+                                    placeholder={
+                                        iconSource === 'thesvg'
+                                            ? (isTh ? 'ค้นหาโลโก้แบรนด์ เช่น netflix, spotify...' : 'Search brands e.g. netflix, spotify...')
+                                            : (isTh ? 'ค้นหาไอคอน เช่น Heart, Star, Music...' : 'Search icons e.g. Heart, Star, Music...')
+                                    }
                                     value={iconSearch}
                                     onChange={(e) => setIconSearch(e.target.value)}
                                     className="h-8 text-xs pl-8"
                                 />
                             </div>
-                            {/* Grid with infinite scroll */}
+
                             <div
                                 ref={iconScrollRef}
                                 className="grid grid-cols-5 sm:grid-cols-6 gap-1.5 p-2 rounded-xl bg-card/60 border border-border/50 max-h-48 overflow-y-auto"
                             >
                                 {visibleIcons.map((iconName) => {
-                                    const isSelected = form.icon === iconName;
+                                    const selected = isIconSelected(iconName);
+                                    const LucideIcon = ICON_MAP[iconName];
                                     return (
                                         <button
                                             key={iconName}
                                             type="button"
                                             title={iconName}
-                                            onClick={() => setForm({ ...form, icon: iconName })}
+                                            onClick={() => handleSelectIcon(iconName)}
                                             className={`h-9 rounded-lg flex items-center justify-center transition-all ${
-                                                isSelected
+                                                selected
                                                     ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-400/50'
                                                     : 'hover:bg-accent text-muted-foreground hover:text-foreground'
                                             }`}
                                         >
-                                            {renderIcon(iconName, 'w-4 h-4')}
+                                            {iconSource === 'thesvg' ? (
+                                                <CategoryIcon icon={toTheSvgIconValue(iconName)} className="w-4 h-4" />
+                                            ) : (
+                                                LucideIcon ? <LucideIcon className="w-4 h-4" /> : null
+                                            )}
                                         </button>
                                     );
                                 })}
-                                {/* Sentinel for infinite scroll */}
                                 {hasMore && (
                                     <div ref={sentinelRef} className="col-span-6 h-4 flex items-center justify-center">
                                         <span className="text-[10px] text-muted-foreground animate-pulse">
-                                            {language === 'th' ? 'กำลังโหลด...' : 'Loading more...'}
+                                            {isTh ? 'กำลังโหลด...' : 'Loading more...'}
                                         </span>
                                     </div>
                                 )}
                                 {filteredIcons.length === 0 && (
                                     <div className="col-span-6 py-4 text-center text-xs text-muted-foreground">
-                                        {language === 'th' ? 'ไม่พบไอคอนที่ค้นหา' : 'No icons found'}
+                                        {isTh ? 'ไม่พบไอคอนที่ค้นหา' : 'No icons found'}
                                     </div>
                                 )}
                             </div>
-                            {/* Selected icon preview */}
+
                             {form.icon && (
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span>{language === 'th' ? 'ไอคอนที่เลือก:' : 'Selected:'}</span>
+                                    <span>{isTh ? 'ไอคอนที่เลือก:' : 'Selected:'}</span>
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 font-medium">
-                                        {renderIcon(form.icon, 'w-3.5 h-3.5')}
-                                        {form.icon}
+                                        <CategoryIcon icon={form.icon} className="w-3.5 h-3.5" />
+                                        {selectedLabel}
+                                        {isTheSvgIcon(form.icon) && (
+                                            <Badge variant="outline" className="text-[9px] h-4 px-1 ml-0.5">theSVG</Badge>
+                                        )}
                                     </span>
                                 </div>
                             )}
                         </div>
 
-                        {/* Color Picker */}
                         <div className="space-y-1.5">
                             <Label className="text-xs font-medium">
-                                {language === 'th' ? 'เลือกชุดสี' : 'Select Color Palette'}
+                                {isTh ? 'เลือกชุดสี' : 'Select Color Palette'}
                             </Label>
                             <div className="flex flex-wrap gap-2">
                                 {COLOR_PALETTES.map((palette) => {
@@ -443,14 +496,13 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                             </div>
                         </div>
 
-                        {/* Preview */}
                         <div className="p-3 rounded-xl bg-muted/40 border border-border/50 flex items-center gap-3">
                             <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${form.bg} ${form.color}`}>
-                                {renderIcon(form.icon, 'w-5 h-5')}
+                                <CategoryIcon icon={form.icon} className="w-5 h-5" />
                             </div>
                             <div>
-                                <div className="text-xs font-medium text-muted-foreground">{language === 'th' ? 'ตัวอย่างการแสดงผล' : 'Preview'}</div>
-                                <div className="text-sm font-semibold">{form.nameTh || form.nameEn || (language === 'th' ? 'ชื่อหมวดหมู่' : 'Category Name')}</div>
+                                <div className="text-xs font-medium text-muted-foreground">{isTh ? 'ตัวอย่างการแสดงผล' : 'Preview'}</div>
+                                <div className="text-sm font-semibold">{form.nameTh || form.nameEn || (isTh ? 'ชื่อหมวดหมู่' : 'Category Name')}</div>
                             </div>
                         </div>
 
@@ -459,7 +511,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                                 {t.modals.cancel}
                             </Button>
                             <Button type="submit" disabled={submitting} className="bg-indigo-600 hover:bg-indigo-700">
-                                {submitting ? '...' : editId ? (language === 'th' ? 'บันทึกการแก้ไข' : 'Save Changes') : (language === 'th' ? 'สร้างหมวดหมู่' : 'Create Category')}
+                                {submitting ? '...' : editId ? (isTh ? 'บันทึกการแก้ไข' : 'Save Changes') : (isTh ? 'สร้างหมวดหมู่' : 'Create Category')}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -468,14 +520,13 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                 {!isEditing && (
                     <DialogFooter className="pt-2 border-t border-border/40">
                         <Button type="button" variant="outline" onClick={onClose} className="w-full">
-                            {language === 'th' ? 'ปิด' : 'Close'}
+                            {isTh ? 'ปิด' : 'Close'}
                         </Button>
                     </DialogFooter>
                 )}
             </DialogContent>
         </Dialog>
 
-        {/* Delete Category Confirmation Alert Dialog */}
         <AlertDialog
             open={!!deleteCatTarget}
             onOpenChange={(open) => !open && !isDeletingCat && setDeleteCatTarget(null)}
@@ -483,23 +534,20 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>
-                        {language === 'th' ? 'ยืนยันการลบหมวดหมู่' : 'Delete Category'}
+                        {isTh ? 'ยืนยันการลบหมวดหมู่' : 'Delete Category'}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                        {language === 'th'
+                        {isTh
                             ? `คุณแน่ใจหรือไม่ว่าต้องการลบหมวดหมู่ "${deleteCatTarget?.label_th || deleteCatTarget?.label_en || ''}"?`
                             : `Are you sure you want to delete category "${deleteCatTarget?.label_en || deleteCatTarget?.label_th || ''}"?`}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel disabled={isDeletingCat}>
-                        {language === 'th' ? 'ยกเลิก' : 'Cancel'}
+                        {isTh ? 'ยกเลิก' : 'Cancel'}
                     </AlertDialogCancel>
-                    <AlertDialogAction
-                        onClick={handleConfirmDeleteCat}
-                        disabled={isDeletingCat}
-                    >
-                        {isDeletingCat ? '...' : (language === 'th' ? 'ยืนยันการลบ' : 'Delete')}
+                    <AlertDialogAction onClick={handleConfirmDeleteCat} disabled={isDeletingCat}>
+                        {isDeletingCat ? '...' : (isTh ? 'ยืนยันการลบ' : 'Delete')}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

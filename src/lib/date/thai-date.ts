@@ -82,3 +82,43 @@ export function formatLocalizedDate(
     }
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
+
+/**
+ * จัดรูปแบบเดือน (YYYY-MM) ตามภาษา
+ * th: ก.ย. 2569 / en: Sep 2026
+ */
+export function formatLocalizedMonth(
+    yearMonth: string | null | undefined,
+    language: 'th' | 'en' = 'th'
+): string {
+    if (!yearMonth || typeof yearMonth !== 'string') return '';
+    const parts = yearMonth.trim().split('-');
+    if (parts.length < 2) return yearMonth;
+
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    if (isNaN(year) || isNaN(month) || month < 0 || month > 11) return yearMonth;
+
+    if (language === 'th') {
+        return `${THAI_MONTHS_SHORT[month]} ${year + 543}`;
+    }
+    const d = new Date(year, month, 1);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+}
+
+/**
+ * แปลงวันที่ในข้อความ description เช่น (รอบ 2026-10-06) ให้เป็นรูปแบบท้องถิ่น
+ */
+export function localizeDatesInText(
+    text: string | null | undefined,
+    language: 'th' | 'en' = 'th'
+): string {
+    if (!text) return '';
+    return text.replace(
+        /(\d{4})[-/](\d{1,2})[-/](\d{1,2})/g,
+        (_match, y, m, d) => {
+            const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            return formatLocalizedDate(iso, language, 'medium') || _match;
+        }
+    );
+}

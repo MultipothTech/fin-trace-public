@@ -21,6 +21,7 @@ import { SubscriptionCard } from './subscription-card';
 import { useApp } from '@/providers/app-store';
 import { TRANSLATIONS } from '@/config/constants';
 import { calculateDaysRemaining } from '@/features/notifications/services/notification-service';
+import { formatLocalizedDate } from '@/lib/date/thai-date';
 import type { Subscription, SubscriptionInput } from '@/features/subscriptions/types/subscription.types';
 
 // Lazy-load heavyweight modals on demand
@@ -288,7 +289,7 @@ export const SubscriptionsContent: React.FC = () => {
                             {t.subscriptions.confirmPayDesc
                                 .replace('{name}', payConfirmTarget?.name || '')
                                 .replace('{amount}', (payConfirmTarget?.price || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }))
-                                .replace('{date}', payConfirmTarget?.nextBillingDate || '')}
+                                .replace('{date}', formatLocalizedDate(payConfirmTarget?.nextBillingDate, language, 'medium'))}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

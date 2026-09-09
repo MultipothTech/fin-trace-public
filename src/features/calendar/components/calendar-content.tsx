@@ -11,15 +11,29 @@ import {
     X,
     Filter,
     ArrowUpRight,
+    CheckCircle2,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogFooter,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogAction,
+    AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import { useApp } from '@/providers/app-store';
 import { TRANSLATIONS } from '@/config/constants';
 import { calculateDaysRemaining } from '@/features/notifications/services/notification-service';
 import { resolveCategory } from '@/features/subscriptions/utils/category-helper';
+import { isSubscriptionPaidForCurrentCycle } from '@/features/subscriptions/utils/billing-calculator';
+import { formatLocalizedDate } from '@/lib/date/thai-date';
+import type { Subscription } from '@/features/subscriptions/types/subscription.types';
 
 // Lazy-load heavyweight export modal (29KB)
 const CalendarExportModal = dynamic(
@@ -28,12 +42,15 @@ const CalendarExportModal = dynamic(
 );
 
 export const CalendarContent: React.FC = () => {
-    const { subscriptions, categories, language } = useApp();
+    const { subscriptions, categories, transactions, language, markSubscriptionAsPaid } = useApp();
     const t = TRANSLATIONS[language] || TRANSLATIONS.th;
+    const isTh = language === 'th';
 
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
     const [exportModalOpen, setExportModalOpen] = useState(false);
+    const [payConfirmTarget, setPayConfirmTarget] = useState<Subscription | null>(null);
+    const [isPaying, setIsPaying] = useState(false);
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth(); // 0-11
@@ -95,6 +112,23 @@ export const CalendarContent: React.FC = () => {
         }
         return monthSubscriptions;
     }, [selectedDateStr, dateMap, monthSubscriptions]);
+
+    const handlePayClick = (sub: Subscription) => {
+        setPayConfirmTarget(sub);
+    };
+
+    const handleConfirmPay = async () => {
+        if (!payConfirmTarget) return;
+        try {
+            setIsPaying(true);
+            await markSubscriptionAsPaid(payConfirmTarget.id);
+            setPayConfirmTarget(null);
+        } catch (err) {
+            console.error('Failed to pay subscription:', err);
+        } finally {
+            setIsPaying(false);
+        }
+    };
 
     const totalDisplayedAmount = useMemo(() => {
         return displayedSubscriptions.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
@@ -251,7 +285,7 @@ export const CalendarContent: React.FC = () => {
                         <span>
                             {selectedDateStr ? (
                                 <>
-                                    {t.calendar.billsOnDate.replace('{date}', selectedDateStr)}
+                                    {t.calendar.billsOnDate.replace('{date}', formatLocalizedDate(selectedDateStr, language, 'medium'))}
                                 </>
                             ) : (
                                 <>
@@ -288,11 +322,12 @@ export const CalendarContent: React.FC = () => {
                             const { Icon: IconComp, color: catColor, bg: catBg } = resolveCategory(sub.category, categories, language);
                             const days = calculateDaysRemaining(sub.nextBillingDate);
                             const isUrgent = days >= 0 && days <= 3;
+                            const isPaid = isSubscriptionPaidForCurrentCycle(sub, transactions);
 
                             return (
                                 <div
                                     key={sub.id}
-                                    className="flex items-center justify-between p-3 rounded-lg border border-border/80 bg-background hover:bg-muted/30 transition-colors"
+                                    className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border/80 bg-background hover:bg-muted/30 transition-colors"
                                 >
                                     <div className="flex items-center gap-3 min-w-0">
                                         <div className={`p-2 rounded-lg ${catBg} ${catColor} shrink-0`}>
@@ -301,26 +336,54 @@ export const CalendarContent: React.FC = () => {
                                         <div className="min-w-0">
                                             <p className="font-semibold text-sm text-foreground truncate">{sub.name}</p>
                                             <p className="text-xs text-muted-foreground truncate">
-                                                {sub.nextBillingDate} • {sub.paymentMethod || 'Credit Card'} • {sub.billingCycle}
+                                                {formatLocalizedDate(sub.nextBillingDate, language, 'medium')} • {sub.paymentMethod || 'Credit Card'} • {sub.billingCycle}
                                                 {sub.notes ? ` • 📝 ${sub.notes}` : ''}
                                             </p>
                                         </div>
                                     </div>
 
-                                    <div className="text-right shrink-0">
-                                        <p className="font-bold text-sm text-foreground">฿{Number(sub.price).toLocaleString()}</p>
-                                        {isUrgent ? (
-                                            <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 text-[10px] font-bold">
-                                                {days === 0
-                                                    ? t.overview.dueToday
-                                                    : days === 1
-                                                    ? t.overview.dueTomorrow
-                                                    : t.overview.dueInDays.replace('{days}', String(days))}
-                                            </Badge>
-                                        ) : (
-                                            <span className="text-[10px] text-muted-foreground flex items-center justify-end gap-1">
-                                                <Clock className="w-3 h-3" /> {t.subscriptions.inDays.replace('{days}', String(days))}
-                                            </span>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <div className="text-right">
+                                            <p className="font-bold text-sm text-foreground">฿{Number(sub.price).toLocaleString()}</p>
+                                            {isUrgent ? (
+                                                <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 text-[10px] font-bold">
+                                                    {days === 0
+                                                        ? t.overview.dueToday
+                                                        : days === 1
+                                                        ? t.overview.dueTomorrow
+                                                        : t.overview.dueInDays.replace('{days}', String(days))}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-[10px] text-muted-foreground flex items-center justify-end gap-1">
+                                                    <Clock className="w-3 h-3" /> {t.subscriptions.inDays.replace('{days}', String(days))}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {sub.status === 'active' && (
+                                            isPaid ? (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    disabled
+                                                    title={t.subscriptions.paidForCycleTitle || (isTh ? 'ชำระในรอบนี้แล้ว (ลบประวัติในหน้าประวัติเพื่อยกเลิก)' : 'Paid for this cycle')}
+                                                    className="h-8 px-2 text-xs gap-1 font-medium text-muted-foreground bg-muted/60 border-border/70 opacity-75 cursor-not-allowed shadow-none"
+                                                >
+                                                    <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
+                                                    <span className="hidden sm:inline">{t.subscriptions.paidForCycle || (isTh ? 'ชำระแล้ว' : 'Paid')}</span>
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handlePayClick(sub)}
+                                                    title={t.subscriptions.markAsPaid}
+                                                    className="h-8 px-2 text-xs gap-1 font-medium text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all shadow-xs"
+                                                >
+                                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                                    <span className="hidden sm:inline">{t.subscriptions.markAsPaidQuick}</span>
+                                                </Button>
+                                            )
                                         )}
                                     </div>
                                 </div>
@@ -330,7 +393,7 @@ export const CalendarContent: React.FC = () => {
                 ) : (
                     <div className="text-center py-8 text-xs text-muted-foreground">
                         {selectedDateStr ? (
-                            <p>{t.calendar.noBillsOnDate.replace('{date}', selectedDateStr)}</p>
+                            <p>{t.calendar.noBillsOnDate.replace('{date}', formatLocalizedDate(selectedDateStr, language, 'medium'))}</p>
                         ) : (
                             <p>{t.calendar.noBillsThisMonth}</p>
                         )}
@@ -349,6 +412,36 @@ export const CalendarContent: React.FC = () => {
                 selectedDateStr={selectedDateStr}
                 language={language}
             />
+
+            {/* Mark As Paid Confirmation — same flow as subscriptions page */}
+            <AlertDialog open={!!payConfirmTarget} onOpenChange={(open) => !open && !isPaying && setPayConfirmTarget(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 className="w-5 h-5" />
+                            {t.subscriptions.confirmPayTitle}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {t.subscriptions.confirmPayDesc
+                                .replace('{name}', payConfirmTarget?.name || '')
+                                .replace('{amount}', (payConfirmTarget?.price || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }))
+                                .replace('{date}', formatLocalizedDate(payConfirmTarget?.nextBillingDate, language, 'medium'))}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isPaying}>
+                            {t.modals.cancel}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmPay}
+                            disabled={isPaying}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                        >
+                            {isPaying ? '...' : t.subscriptions.confirmPayAction}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 };

@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import type { Subscription, CategoryItem, Language } from '@/features/subscriptions/types/subscription.types';
 import { SUBSCRIPTION_CATEGORIES, TRANSLATIONS } from '@/config/constants';
+import { formatLocalizedDate } from '@/lib/date/thai-date';
 
 export interface CalendarExportModalProps {
     isOpen: boolean;
@@ -95,7 +96,7 @@ export const CalendarExportModal: React.FC<CalendarExportModalProps> = ({
     // Format scope description
     const getScopeLabel = () => {
         if (scope === 'selected_date' && selectedDateStr) {
-            return `${language === 'th' ? 'วันที่' : 'Date'} ${selectedDateStr}`;
+            return `${language === 'th' ? 'วันที่' : 'Date'} ${formatLocalizedDate(selectedDateStr, language, 'medium')}`;
         }
         if (scope === 'month') {
             return `${monthNames[selectedMonth]} ${language === 'th' ? selectedYear + 543 : selectedYear}`;
@@ -212,7 +213,7 @@ export const CalendarExportModal: React.FC<CalendarExportModalProps> = ({
                     <td><strong>${sub.name}</strong></td>
                     <td><span class="category-badge">${catLabel}</span></td>
                     <td>${sub.billingCycle}</td>
-                    <td>${sub.nextBillingDate}</td>
+                    <td>${formatLocalizedDate(sub.nextBillingDate, language, 'medium')}</td>
                     <td>${sub.paymentMethod || 'Credit Card'}</td>
                     <td style="text-align: center;"><span class="status-badge ${statusClass}">${statusText}</span></td>
                     <td style="text-align: right; font-weight: bold;">฿${Number(sub.price).toLocaleString()}</td>
@@ -463,7 +464,7 @@ export const CalendarExportModal: React.FC<CalendarExportModalProps> = ({
                                 </SelectItem>
                                 {selectedDateStr && (
                                     <SelectItem value="selected_date">
-                                        {language === 'th' ? `เฉพาะวันที่เลือก (${selectedDateStr})` : `Selected Date (${selectedDateStr})`}
+                                        {language === 'th' ? `เฉพาะวันที่เลือก (${formatLocalizedDate(selectedDateStr, language, 'medium')})` : `Selected Date (${formatLocalizedDate(selectedDateStr, language, 'medium')})`}
                                     </SelectItem>
                                 )}
                                 <SelectItem value="year">
