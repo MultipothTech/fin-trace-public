@@ -150,13 +150,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, user, view = '
 
             {/* Main Content Area */}
             <main className="flex-1 overflow-y-auto overflow-x-hidden relative bg-background scrollbar-hide">
-                <div className="p-4 md:p-8 max-w-4xl mx-auto min-h-full pb-24 md:pb-8">
+                <div className="p-4 md:p-8 max-w-4xl mx-auto min-h-full pb-32 md:pb-8">
                     {children}
                 </div>
             </main>
 
             {/* Mobile Bottom Navigation Bar (5 tabs) */}
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-background border-t border-border grid grid-cols-5 px-1 z-50 pb-safe">
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border grid grid-cols-5 px-1.5 pt-2 pb-6 sm:pb-3 shadow-[0_-4px_24px_rgba(0,0,0,0.1)] [padding-bottom:max(1.5rem,env(safe-area-inset-bottom,1.5rem))]">
                 <MobileNavButton
                     active={view === 'overview'}
                     onClick={() => setView('overview')}
